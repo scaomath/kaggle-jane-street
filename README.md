@@ -18,15 +18,19 @@
 ## Autoencoder
 * Kaggle Notebook: [https://www.kaggle.com/ztyreg/fork-of-s8900-ts](https://www.kaggle.com/ztyreg/fork-of-s8900-ts)
 * Local Notebook: TBD
-* Submission time: ~2 hours
 * Score: 8358.763
+* Submission time: ~2 hours (CPU)
+
 
 # Gradient boosting models
 ## XGBoost:
 * Kaggle Notebook: [https://www.kaggle.com/ztyreg/xgb-benchmark](https://www.kaggle.com/ztyreg/xgb-benchmark)
 * Local Notebook: [https://github.com/scaomath/kaggle-jane-street/blob/main/lgb/v01_explore.ipynb](https://github.com/scaomath/kaggle-jane-street/blob/main/lgb/v01_explore.ipynb)
 * Score: 5557.170
-* Submission time: ~2 hours
+* Submission time: ~2 hours (CPU)
+Notes:
+* Training 1 XGBoost model only takes about 5 minutes, so we do not need to save the model
+* Needs different feature processing than the autoencoder model
 
 # Trained models
 Google drive folder: TBD
