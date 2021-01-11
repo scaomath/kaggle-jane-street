@@ -20,6 +20,7 @@
 ## XGBoost:
 * Notebook: [https://www.kaggle.com/ztyreg/xgb-benchmark](https://www.kaggle.com/ztyreg/xgb-benchmark)
 * Score: 5557.170
+* Submission time: ~2 hours
 
 # Trained models
 Google drive folder: TBD
