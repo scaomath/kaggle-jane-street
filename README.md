@@ -17,7 +17,7 @@
 # NN models
 
 # Gradient boosting models
-XGBoost:
+## XGBoost:
 * Notebook: [https://www.kaggle.com/ztyreg/xgb-benchmark](https://www.kaggle.com/ztyreg/xgb-benchmark)
 * Score: 5557.170
 
