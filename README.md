@@ -15,11 +15,16 @@
 - [ ] Stable CV-LB strategy
 
 # NN models
+## Autoencoder
+* Kaggle Notebook: [https://www.kaggle.com/ztyreg/fork-of-s8900-ts](https://www.kaggle.com/ztyreg/fork-of-s8900-ts)
+* Local Notebook: TBD
+* Submission time: ~2 hours
+* Score: 8358.763
 
 # Gradient boosting models
 ## XGBoost:
 * Kaggle Notebook: [https://www.kaggle.com/ztyreg/xgb-benchmark](https://www.kaggle.com/ztyreg/xgb-benchmark)
-* Notebook: [https://github.com/scaomath/kaggle-jane-street/blob/main/lgb/v01_explore.ipynb](https://github.com/scaomath/kaggle-jane-street/blob/main/lgb/v01_explore.ipynb)
+* Local Notebook: [https://github.com/scaomath/kaggle-jane-street/blob/main/lgb/v01_explore.ipynb](https://github.com/scaomath/kaggle-jane-street/blob/main/lgb/v01_explore.ipynb)
 * Score: 5557.170
 * Submission time: ~2 hours
 
