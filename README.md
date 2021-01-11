@@ -28,7 +28,8 @@
 * Local Notebook: [https://github.com/scaomath/kaggle-jane-street/blob/main/lgb/v01_explore.ipynb](https://github.com/scaomath/kaggle-jane-street/blob/main/lgb/v01_explore.ipynb)
 * Score: 5557.170
 * Submission time: ~2 hours (CPU)
-Notes:
+
+**Notes**:
 * Training 1 XGBoost model only takes about 5 minutes, so we do not need to save the model
 * Needs different feature processing than the autoencoder model
 
