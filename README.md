@@ -13,6 +13,7 @@
 - [ ] EDA
 - [x] A simple starter
 - [ ] Stable CV-LB strategy
+- [ ] Writing a simple `iter_env` simulator
 
 # NN models
 ## Autoencoder
@@ -20,6 +21,9 @@
 * Local Notebook: TBD
 * Score: 8358.763
 * Submission time: ~2 hours (CPU)
+
+## AE+MLP+prediction cache
+- Attempt 0.1: simply saving `pred_df.copy()` and using `pd.concat` is way too slow (7-8 iteration/s << 45 which is the current starter's). TO-DO: add a class so that prediction is a function under this class, model outputs to give more information, and some objects "depicting" the current market volatility. 
 
 
 # Gradient boosting models
