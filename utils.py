@@ -214,6 +214,21 @@ def reduce_mem_usage(df, verbose=True):
     if verbose: print(f'Mem. usage decreased to {end_mem:5.2f} Mb ({100 * (start_mem - end_mem) / start_mem:.1f}% reduction)')
     return df
 
+def median_avg(predictions,beta=0.5,debug=True):
+    '''
+    predictions should be of a vector shape n_models
+    beta: if beta is 0.5, then the middle 50% will be averaged
+    '''
+    sorted_predictions=np.sort(predictions)
+    n_model=len(sorted_predictions)
+    mid_point=n_model//2+1
+    n_avg=int(n_model*beta)
+    if debug:
+        print('sorted_list',sorted_predictions)
+        print('after_cut',sorted_predictions[mid_point-n_avg//2-1:mid_point+n_avg//2])
+    to_avg=sorted_predictions[mid_point-n_avg//2-1:mid_point+n_avg//2]
+    return np.mean(to_avg)
+
 
 if __name__ == "__main__":
     get_system()
