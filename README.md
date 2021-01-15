@@ -19,10 +19,10 @@
 
 # NN models
 ## Autoencoder
-* Kaggle Notebook: [https://www.kaggle.com/ztyreg/fork-of-s8900-ts](https://www.kaggle.com/ztyreg/fork-of-s8900-ts)
-* Local Notebook: TBD
-* Score: 8358.763
-* Submission time: ~2 hours (CPU)
+- Kaggle Notebook: [https://www.kaggle.com/ztyreg/fork-of-s8900-ts](https://www.kaggle.com/ztyreg/fork-of-s8900-ts)
+- Local Notebook: TBD
+- Score: 8358.763
+- Submission time: ~2 hours (CPU)
 
 ## AE+MLP+prediction cache
 - Attempt 0.1: simply saving `pred_df.copy()` and using `pd.concat` is way too slow (7-8 iteration/s << 45 which is the current starter's). TO-DO: add a class so that prediction is a function under this class, model outputs to give more information, and some objects "depicting" the current market volatility. 
@@ -30,18 +30,19 @@
 
 # Gradient boosting models
 ## XGBoost:
-* Kaggle Notebook: [https://www.kaggle.com/ztyreg/xgb-benchmark](https://www.kaggle.com/ztyreg/xgb-benchmark)
-* Local Notebook: [https://github.com/scaomath/kaggle-jane-street/blob/main/lgb/v01_explore.ipynb](https://github.com/scaomath/kaggle-jane-street/blob/main/lgb/v01_explore.ipynb)
-* Score: 5557.170
-* Submission time: ~2 hours (CPU)
+- Kaggle Notebook: [https://www.kaggle.com/ztyreg/xgb-benchmark](https://www.kaggle.com/ztyreg/xgb-benchmark)
+- Local Notebook: [https://github.com/scaomath/kaggle-jane-street/blob/main/lgb/v01_explore.ipynb](https://github.com/scaomath/kaggle-jane-street/blob/main/lgb/v01_explore.ipynb)
+- Score: 5557.170
+- Submission time: ~2 hours (CPU)
 
 **Notes**:
-* Training 1 XGBoost model only takes about 5 minutes, so we do not need to save the model
-* Needs different feature processing than the autoencoder model
+- Training 1 XGBoost model only takes about 5 minutes, so we do not need to save the model
+- Needs different feature processing than the autoencoder model
 
 **Thoughts**:
-* Add time lag features
-* Add transformed features (abs, log, std, polynomial)
+- Add time lag features
+  - Add all lag1 features: no improvement (5039.022)
+- Add transformed features (abs, log, std, polynomial)
 
 # Trained models
 Google drive folder: TBD
