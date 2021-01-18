@@ -127,8 +127,8 @@ def timer(label: str) -> None:
         sign = '+' if delta >= 0 else '-'
         delta = math.fabs(delta)
         end = time()
-        print(color(f"{label}:  done at {end} ({end - start:.2f} secs elapsed);", color=Colors.blue))
-        print(color(f"LOCAL RAM USAGE AT END:   {m1:.2f}GB ({sign}{delta:.2f}GB)", color=Colors.green))
+        print(color(f"{label}: done at {end} ({end - start:.2f} secs elapsed);", color=Colors.blue))
+        print(color(f"LOCAL RAM USAGE AT END: {m1:.2f}GB ({sign}{delta:.2f}GB)", color=Colors.green))
         print('\n')
 
 
