@@ -17,7 +17,12 @@
 - [ ] Stable CV-LB strategy
 - [ ] Writing a simple `iter_env` simulator
 
+# EDA
+- Only 35%-40% of the samples have `action` being 1, depending on the CV split.
+
 # NN models
+Current NN models use `date>85` and `weight>0`.
+
 ## Autoencoder
 - Kaggle Notebook: [https://www.kaggle.com/ztyreg/fork-of-s8900-ts](https://www.kaggle.com/ztyreg/fork-of-s8900-ts)
 - Local Notebook: TBD

@@ -8,7 +8,7 @@ import pandas as pd
 import datatable as dt
 
 HOME = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(HOME,  'model')
+MODEL_DIR = os.path.join(HOME,  'models')
 DATA_DIR = os.path.join(HOME,  'data')
 sys.path.append(HOME) 
 
@@ -36,12 +36,14 @@ if __name__ == "__main__":
     elif data_parquet:
         print(f"Train parquet at: {data_parquet[0]}.")
         with timer("Loading train"):
-            _ = pd.read_parquet(data_parquet[0])
+            train = pd.read_parquet(data_parquet[0])
+        print(train.dtypes[:10])
+        print(train.dtypes[-10:])
     else:
         with timer("Processing train"):
             # train = pd.read_csv(data_file[0])
             # train = train.astype({c: np.float32 for c in train.select_dtypes(include='float64').columns}) 
-            train_dtypes = {'date': dt.int64,
+            train_dtypes = {'date': dt.int32,
                             'ts_id': dt.int64,
                             'resp': dt.float64,
                             'weight': dt.float64,
