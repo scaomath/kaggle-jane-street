@@ -7,3 +7,5 @@ __pycache__/
 *.pth
 *.csv
 data/janestreet/competition.cpython-37m-x86_64-linux-gnu.so
+data/example_sample_submission.csv
+
