@@ -10,6 +10,7 @@ import tensorflow as tf
 import kerastuner as kt
 import numpy as np
 import pandas as pd
+import pickle
 from sklearn.model_selection import GroupKFold
 
 from tqdm import tqdm
@@ -25,6 +26,8 @@ from utils import *
 from utils_js import *
 #%%
 TRAINING = True
+TRAINING_AE = False
+HP_SEARCH = False
 GPU = True
 USE_FINETUNE = True
 FOLDS = 5
@@ -70,7 +73,7 @@ def create_autoencoder(input_dim, output_dim, noise=0.05, dropout=0.15):
     x = Dense(32,activation='relu')(x)
     x = BatchNormalization()(x)
     x = Dropout(dropout)(x)    
-    x = Dense(output_dim,activation='sigmoid', name='label_output')(x)
+    x = Dense(output_dim, activation='sigmoid', name='label_output')(x)
     
     encoder = Model(inputs=i,outputs=encoded)
     autoencoder = Model(inputs=i,outputs=[decoded,x])
@@ -88,8 +91,8 @@ def create_model(hp,input_dim,output_dim,encoder):
     x = BatchNormalization()(x)
     x = Dropout(hp.Float('init_dropout',0.0,0.5))(x)
     
-    for i in range(hp.Int('num_layers',1,3)):
-        x = Dense(hp.Int('num_units_{i}',64,256))(x)
+    for i in range(hp.Int('num_layers',1,5)):
+        x = Dense(hp.Int(f'num_units_{i}',64,256))(x)
         x = BatchNormalization()(x)
         x = Lambda(tf.keras.activations.swish)(x)
         x = Dropout(hp.Float(f'dropout_{i}',0.0,0.5))(x)
@@ -102,7 +105,7 @@ def create_model(hp,input_dim,output_dim,encoder):
     return model
 # %%
 autoencoder, encoder = create_autoencoder(X.shape[-1],y.shape[-1],noise=0.1)
-if TRAINING:
+if TRAINING_AE:
     autoencoder.fit(X, (X,y),
                     epochs=1000,
                     batch_size=4096*2, 
@@ -135,7 +138,8 @@ class CVTuner(kt.engine.tuner.Tuner):
                       validation_data=(X_val,y_val),
                       epochs=epochs,
                       batch_size=batch_size,
-                      callbacks=callbacks)
+                      callbacks=callbacks,
+                      verbose=2)
             
             val_losses.append([hist.history[k][-1] for k in hist.history])
 
@@ -151,23 +155,29 @@ tuner = CVTuner(
         oracle=kt.oracles.BayesianOptimization(
         objective= kt.Objective('val_auc', direction='max'),
         num_initial_points=10,
-        max_trials=50))
-#%%
-if TRAINING:
-    gkf = PurgedGroupTimeSeriesSplit(n_splits = FOLDS, group_gap=20)
-    splits = list(gkf.split(y, groups=train['date'].values))
+        max_trials=20))
 
+gkf = PurgedGroupTimeSeriesSplit(n_splits = FOLDS, group_gap=20)
+splits = list(gkf.split(y, groups=train['date'].values))
+#%%
+if HP_SEARCH:
     tuner.search((X,),(y,),
                  splits=splits,
-                 batch_size=4096,
-                 epochs=100,
+                 batch_size=8192,
+                 epochs=20,
+                 verbose=2,
                  callbacks=[EarlyStopping('val_auc', 
                                           mode='max',
                                           patience=5)])
-
     hp  = tuner.get_best_hyperparameters(1)[0]
 
-    pd.to_pickle(hp, MODEL_DIR+f'/best_hp_{SEED}.pkl')
+    with open(MODEL_DIR+f'/best_hp_{SEED}.pkl', 'wb') as f:
+        pickle.dump(hp, f, protocol=pickle.HIGHEST_PROTOCOL)
+    tuner.results_summary()
+#%%
+if TRAINING:
+    with open(MODEL_DIR+f'/best_hp_{SEED}.pkl', 'rb') as f:
+        hp = pickle.load(f)
 
     for fold, (idx_tr, idx_val) in enumerate(splits):
         model = model_fn(hp)
@@ -177,7 +187,7 @@ if TRAINING:
                   y_train,
                   validation_data=(X_val,y_val),
                   epochs=100, 
-                  batch_size=4096,
+                  batch_size=8192,
                   callbacks=[EarlyStopping('val_auc',
                                            mode='max',
                                            patience=10,
@@ -185,9 +195,9 @@ if TRAINING:
         model.save_weights(MODEL_DIR + f'/model_{SEED}_{fold}.hdf5')
         model.compile(Adam(hp.get('lr')/100),loss='binary_crossentropy')
 
-        model.fit(X_val,y_val,epochs=3,batch_size=4096)
+        model.fit(X_val, y_val, epochs=3, batch_size=8192)
         model.save_weights(MODEL_DIR+f'/model_{SEED}_{fold}_finetune.hdf5')
-    tuner.results_summary()
+    
 else:
     models = []
     hp = pd.read_pickle(MODEL_DIR+f'/best_hp_{SEED}.pkl')
