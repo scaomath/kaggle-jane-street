@@ -8,4 +8,8 @@ __pycache__/
 *.csv
 data/janestreet/competition.cpython-37m-x86_64-linux-gnu.so
 data/example_sample_submission.csv
-
+*.parquet
+*.json
+*.index
+nn/untitled_project/
+*.hdf5
