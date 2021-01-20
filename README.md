@@ -22,6 +22,7 @@
 
 # NN models
 Current NN models use `date>85` and `weight>0`.
+- Current best: Ethan's AE+MLP baseline the last 2 folds, not fine-tune models, with a custom median ensembling.
 
 ## Autoencoder
 - Kaggle Notebook: [https://www.kaggle.com/ztyreg/fork-of-s8900-ts](https://www.kaggle.com/ztyreg/fork-of-s8900-ts)
