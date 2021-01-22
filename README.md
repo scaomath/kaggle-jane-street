@@ -9,7 +9,7 @@
 - Another notebook on volatility (this one we should use its info at dicretion): [https://www.kaggle.com/charlesleahy/identifying-volatility-features](https://www.kaggle.com/charlesleahy/identifying-volatility-features)
 - Two-Sigma's stock prediction competition (with a similar format) winning solution of 5th place: [https://medium.com/kaggle-blog/two-sigma-financial-modeling-code-competition-5th-place-winners-interview-team-best-fitting-279a493c76bd](https://medium.com/kaggle-blog/two-sigma-financial-modeling-code-competition-5th-place-winners-interview-team-best-fitting-279a493c76bd)
 - The data in the actual `test` is disjoint from the `train` (confirmed by the host at [https://www.kaggle.com/c/jane-street-market-prediction/discussion/199551](https://www.kaggle.com/c/jane-street-market-prediction/discussion/199551))
-- [https://github.com/scaomath/kaggle-jane-street/blob/main/nn/v01_ae_auc.ipynb](This notebook) suggests that `GroupKFold` is better than `PurgedGroupTimeSeriesSplit`
+- [This notebook](https://github.com/scaomath/kaggle-jane-street/blob/main/nn/v01_ae_auc.ipynb) suggests that `GroupKFold` is better than `PurgedGroupTimeSeriesSplit`
 
 
 # TO-DO:
