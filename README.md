@@ -31,6 +31,9 @@ Current NN models use `date>85` and `weight>0`.
 - Score: 8358.763
 - Submission time: ~2 hours (CPU)
 
+**Thoughts**:
+- Forward fill (8781.740) seems to be better than mean imputation, although I haven't tested if the difference is significant
+
 ## AE+MLP+prediction cache
 - Attempt 0.1: simply saving `pred_df.copy()` and using `pd.concat` is way too slow (7-8 iteration/s << 45 which is the current starter's). TO-DO: add a class so that prediction is a function under this class, model outputs to give more information, and some objects "depicting" the current market volatility. 
 
