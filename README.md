@@ -15,8 +15,9 @@
 # TO-DO:
 - [ ] EDA
 - [x] A simple starter
-- [ ] Stable CV-LB strategy
+- [x] Stable CV-LB strategy (Update Jan 22, now I think this is somehow impossible)
 - [ ] Writing a simple `iter_env` simulator
+- [ ] Testing a moving average `fillna()` strategy
 
 # EDA
 - Only 35%-40% of the samples have `action` being 1, depending on the CV split.
@@ -24,6 +25,7 @@
 # NN models
 Current NN models use `date>85` and `weight>0`.
 - Current best: Ethan's AE+MLP baseline the last 2 folds, not fine-tune models, with a custom median ensembling.
+- (After debugging) Both custom median (average of middle 50%) and `np.mean` has better public score.
 
 ## Autoencoder
 - Kaggle Notebook: [https://www.kaggle.com/ztyreg/fork-of-s8900-ts](https://www.kaggle.com/ztyreg/fork-of-s8900-ts)
