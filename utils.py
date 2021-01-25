@@ -214,7 +214,7 @@ def reduce_mem_usage(df, verbose=True):
     if verbose: print(f'Mem. usage decreased to {end_mem:5.2f} Mb ({100 * (start_mem - end_mem) / start_mem:.1f}% reduction)')
     return df
 
-def median_avg(predictions,beta=0.5,debug=True):
+def median_avg(predictions, beta=0.5, debug=False):
     '''
     predictions should be of a vector shape n_models
     beta: if beta is 0.5, then the middle 50% will be averaged

@@ -26,8 +26,8 @@ from utils import *
 from utils_js import *
 #%%
 TRAINING = True
-TRAINING_AE = False
-HP_SEARCH = False
+TRAINING_AE = True
+HP_SEARCH = True
 GPU = True
 USE_FINETUNE = True
 FOLDS = 5
@@ -111,7 +111,8 @@ if TRAINING_AE:
                     batch_size=4096*2, 
                     validation_split=0.1,
                     callbacks=[EarlyStopping('val_loss',
-                               patience=10,restore_best_weights=True)])
+                               patience=10,
+                               restore_best_weights=True)])
     encoder.save_weights(MODEL_DIR+'/encoder.hdf5')
 else:
     encoder.load_weights(MODEL_DIR+'/encoder.hdf5')
@@ -121,7 +122,7 @@ encoder.trainable = True
 #%%
 
 class CVTuner(kt.engine.tuner.Tuner):
-    def run_trial(self, trial, X, y, splits, batch_size=32, epochs=1, callbacks=None):
+    def run_trial(self, trial, X, y, splits, batch_size=32, verbose=2, epochs=1, callbacks=None):
         val_losses = []
         for idx_tr, idx_val in splits:
             X_train, X_val = [x[idx_tr] for x in X], [x[idx_val] for x in X]
@@ -139,7 +140,7 @@ class CVTuner(kt.engine.tuner.Tuner):
                       epochs=epochs,
                       batch_size=batch_size,
                       callbacks=callbacks,
-                      verbose=2)
+                      verbose=verbose)
             
             val_losses.append([hist.history[k][-1] for k in hist.history])
 
@@ -152,10 +153,11 @@ model_fn = lambda hp: create_model(hp,X.shape[-1],y.shape[-1], encoder)
 
 tuner = CVTuner(
         hypermodel=model_fn,
+        directory=f'ae_mlp_{SEED}',
         oracle=kt.oracles.BayesianOptimization(
         objective= kt.Objective('val_auc', direction='max'),
         num_initial_points=10,
-        max_trials=20))
+        max_trials=50))
 
 gkf = PurgedGroupTimeSeriesSplit(n_splits = FOLDS, group_gap=20)
 splits = list(gkf.split(y, groups=train['date'].values))
@@ -164,7 +166,7 @@ if HP_SEARCH:
     tuner.search((X,),(y,),
                  splits=splits,
                  batch_size=8192,
-                 epochs=20,
+                 epochs=50,
                  verbose=2,
                  callbacks=[EarlyStopping('val_auc', 
                                           mode='max',

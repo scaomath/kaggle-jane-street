@@ -13,3 +13,5 @@ data/example_sample_submission.csv
 *.index
 nn/untitled_project/
 *.hdf5
+nn/ae_mlp_1127/
+nn/ae_mlp_1127/untitled_project/
