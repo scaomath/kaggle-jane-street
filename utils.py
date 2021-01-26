@@ -107,7 +107,7 @@ def color(string: str, color: Colors = Colors.yellow) -> str:
     return f"{color}{string}{Colors.end}"
 
 @contextmanager
-def timer(label: str) -> None:
+def timer(label: str, compact=False) -> None:
     '''
     https://www.kaggle.com/c/riiid-test-answer-prediction/discussion/203020#1111022
     print 
@@ -115,22 +115,26 @@ def timer(label: str) -> None:
     2. the memory usage.
     '''
     p = psutil.Process(os.getpid())
-    start = time()  # Setup - __enter__
     m0 = p.memory_info()[0] / 2. ** 30
-    print(color(f"{label}: start at {start};", color=Colors.blue))
-    print(color(f"LOCAL RAM USAGE AT START: {m0:.2f} GB" , color=Colors.green))
-    try:
-        yield  # yield to body of `with` statement
-    finally:  # Teardown - __exit__
-        m1 = p.memory_info()[0] / 2. ** 30
-        delta = m1 - m0
-        sign = '+' if delta >= 0 else '-'
-        delta = math.fabs(delta)
-        end = time()
-        print(color(f"{label}: done at {end} ({end - start:.2f} secs elapsed);", color=Colors.blue))
-        print(color(f"LOCAL RAM USAGE AT END: {m1:.2f}GB ({sign}{delta:.2f}GB)", color=Colors.green))
-        print('\n')
-
+    start = time()  # Setup - __enter__
+    if not compact:
+        print(color(f"{label}: start at {start:2f};", color=Colors.blue))
+        print(color(f"LOCAL RAM USAGE AT START: {m0:.2f} GB" , color=Colors.green))
+        try:
+            yield  # yield to body of `with` statement
+        finally:  # Teardown - __exit__
+            m1 = p.memory_info()[0] / 2. ** 30
+            delta = m1 - m0
+            sign = '+' if delta >= 0 else '-'
+            delta = math.fabs(delta)
+            end = time()
+            print(color(f"{label}: done at {end:2f} ({end - start:.6f} secs elapsed);", color=Colors.blue))
+            print(color(f"LOCAL RAM USAGE AT END: {m1:.2f}GB ({sign}{delta:.2f}GB)", color=Colors.green))
+            print('\n')
+    else:
+        yield
+        print(color(f"{label} - done in {time() - start:.6f} seconds. \n", color=Colors.blue))
+    
 
 def get_memory(num_var=10):
     for name, size in sorted(((name, sys.getsizeof(value)) for name, value in globals().items()), key= lambda x: -x[1])[:num_var]:

@@ -176,10 +176,38 @@ def utility_score_bincount(date, weight, resp, action):
 
 @njit(fastmath = True)
 def utility_score_numba(date, weight, resp, action):
+    count_i = len(np.unique(date))
     Pi = np.bincount(date, weight * resp * action)
-    t = np.sum(Pi) / np.sqrt(np.sum(Pi ** 2)) * np.sqrt(250 / len(Pi))
+    t = np.sum(Pi) / np.sqrt(np.sum(Pi ** 2)) * np.sqrt(250 / count_i)
     u = min(max(t, 0), 6) * np.sum(Pi)
     return u
+
+
+def utility_score_pandas(df, labels='action,.r0,.weight,.date'.split(',')):
+    """
+    LDMTWO's pandas implementation
+    Calculate utility score of a dataframe according to formulas defined at
+    https://www.kaggle.com/c/jane-street-market-prediction/overview/evaluation
+    """
+    action,resp,weight,date = labels
+    df = df.set_index(date)
+    p = df[weight]  * df[resp] * df[action]
+    p_i = p.groupby(date).sum()
+    t = (p_i.sum() / np.sqrt((p_i**2).sum())) * (np.sqrt(250 / p_i.index.size))
+    return np.clip(t,0,6) * p_i.sum()
+
+
+def utility_score_pandas2(df):
+    """
+    Jorijn Jacko Smit's another pandas implementation
+    Calculate utility score of a dataframe according to formulas defined at
+    https://www.kaggle.com/c/jane-street-market-prediction/overview/evaluation
+    """
+
+    df['p'] = df['weight']  * df['resp'] * df['action']
+    p_i = df.set_index('date')['p'].groupby('date').sum()
+    t = (p_i.sum() / np.sqrt((p_i**2).sum())) * (np.sqrt(250 / p_i.index.size))
+    return min(max(t, 0), 6) * p_i.sum()
 
 @njit(fastmath = True)
 def decision_threshold_optimisation(preds, date, weight, resp, low = 0, high = 1, bins = 100, eps = 1):
