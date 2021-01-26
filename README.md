@@ -16,8 +16,9 @@
 - [ ] EDA
 - [x] A simple starter
 - [x] Stable CV-LB strategy (Update Jan 22, now I think this is somehow impossible)
-- [ ] Writing a simple `iter_env` simulator
+- [x] Writing a simple `iter_env` simulator
 - [ ] Testing a moving average `fillna()` strategy
+- [ ] Using the `iter_env` simulator to test the impact of different threshold.
 
 # EDA
 - Only 35%-40% of the samples have `action` being 1, depending on the CV split.

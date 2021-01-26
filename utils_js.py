@@ -234,6 +234,20 @@ def fast_fillna(array, values):
     return array
 
 
+def median_avg(predictions, beta=0.5, debug=False):
+    '''
+    predictions should be of a vector shape n_models
+    beta: if beta is 0.5, then the middle 50% will be averaged
+    '''
+    sorted_predictions=np.sort(predictions)
+    n_model=len(sorted_predictions)
+    mid_point=n_model//2+1
+    n_avg=int(n_model*beta)
+    if debug:
+        print('sorted_list',sorted_predictions)
+        print('after_cut',sorted_predictions[mid_point-n_avg//2-1:mid_point+n_avg//2])
+    to_avg=sorted_predictions[mid_point-n_avg//2-1:mid_point+n_avg//2]
+    return np.mean(to_avg)
 
 def create_mlp_tf(
     num_columns, num_labels, hidden_units, dropout_rates, label_smoothing, learning_rate
