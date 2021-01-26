@@ -17,7 +17,8 @@ from utils import *
 from utils_js import *
 
 SEED = 1111
-DAY_SIMU_TEST = 490 # this day to 499 as simulated test days
+START_SIMU_TEST = 490 # this day to 499 as simulated test days
+END_SIMU_TEST = 499
 THRESHOLD = 0.5
 TQDM_INT = 47
 batch_size = 5000
@@ -25,7 +26,8 @@ label_smoothing = 1e-2
 learning_rate = 1e-3
 #%%
 '''
-The mock test set is taken from the Purged Time series CV split last fold's test set:
+The mock test set is taken after the Purged Time series CV split last fold's test set:
+i.e., START_SIMU_TEST date needs to be > 382
 
 Reference:
 https://www.kaggle.com/jorijnsmit/found-the-holy-grail-grouptimeseriessplit
@@ -49,22 +51,17 @@ resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 
 f_mean = np.mean(train[features[1:]].values,axis=0)
 
-simu_test = train[train['date'] > DAY_SIMU_TEST].reset_index(drop = True) 
+simu_test = train[train['date'] > START_SIMU_TEST & train['date'] < END_SIMU_TEST].reset_index(drop = True) 
 
 print(f"Simulated public test file length: {len(simu_test)}")
-
-#%%
-# for tr_idx, val_idx in PurgedGroupTimeSeriesSplit().split(train, groups=train['date']):
-#     print(train.loc[tr_idx, 'date'].unique())
-#     print(train.loc[val_idx, 'date'].unique(), '\n\n')
 # %%
 class Iter_Valid(object):
     def __init__(self, df):
         df = df.reset_index(drop=True)
-        self.df = df
+        self.df = df[features]
         self.weight = df['weight'].astype(float).values
         self.action = df['action'].astype(int).values
-        self.pred_df = df
+        self.pred_df = df[['action']]
         self.pred_df['action'] = 0
         self.len = len(df)
         self.current = 0
@@ -92,42 +89,17 @@ except:
 
 
 
-# %%
-
-def create_mlp(
-    num_columns, num_labels, hidden_units, dropout_rates, label_smoothing, learning_rate
-):
-
-    inp = tf.keras.layers.Input(shape=(num_columns,))
-    x = tf.keras.layers.BatchNormalization()(inp)
-    x = tf.keras.layers.Dropout(dropout_rates[0])(x)
-    for i in range(len(hidden_units)):
-        x = tf.keras.layers.Dense(hidden_units[i])(x)
-        x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Activation(tf.keras.activations.swish)(x)
-        x = tf.keras.layers.Dropout(dropout_rates[i + 1])(x)
-
-    x = tf.keras.layers.Dense(num_labels)(x)
-    out = tf.keras.layers.Activation("sigmoid")(x)
-
-    model = tf.keras.models.Model(inputs=inp, outputs=out)
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
-        loss=tf.keras.losses.BinaryCrossentropy(label_smoothing=label_smoothing),
-        metrics=tf.keras.metrics.AUC(name="AUC"),
-    )
-
-    return model
-
-
+# %% model
 hidden_units = [150, 150, 150]
 dropout_rates = [0.2, 0.2, 0.2, 0.2]
 
 
-model = create_mlp(
-    len(features), 5, hidden_units, dropout_rates, label_smoothing, learning_rate
-    )
-
+model = create_mlp_tf(num_columns=len(features), 
+                      num_labels=5, 
+                      hidden_units=hidden_units, 
+                      dropout_rates=dropout_rates, 
+                      label_smoothing=label_smoothing, 
+                      learning_rate=learning_rate)
 
 model.load_weights(os.path.join(MODEL_DIR,f'model_{SEED}.hdf5'))
 model.summary()
@@ -140,22 +112,7 @@ weight = simu_test['weight'].values
 resp = simu_test['resp'].values
 action = simu_test['action'].values
 
-# %%
-with timer("Numba", compact=True):
-    print(utility_score_numba(date, weight, resp, action))
-
-with timer("numpy", compact=True):
-    print(utility_score_bincount(date, weight, resp, action))
-
-with timer("loops", compact=True):
-    print(utility_score_loop(date, weight, resp, action))
-
-with timer("Pandas", compact=True):
-    print(utility_score_pandas(simu_test, labels = ['action', 'resp', 'weight', 'date']))
-
-with timer("Pandas2", compact=True):
-    print(utility_score_pandas2(simu_test))
-# %% inference
+# %% inference simulation
 '''
 Current inference just use iterrows()
 '''
@@ -202,3 +159,4 @@ score = utility_score_bincount(date, weight, resp, y_true)
 score_pred = utility_score_bincount(date, weight, resp, y_pred)
 print('\nMax possible utility score:', score)
 print('\nModel utility score:       ', score_pred)
+# %%
