@@ -13,57 +13,28 @@ HOME = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = HOME+'/model/'
 DATA_DIR = HOME+'/data/'
 from utils import *
-# %%
+from utils_js import *
+
+#%%
 '''
-Simulate the inference env of Kaggle
+The mock test set is taken from the Purged Time series CV split last fold's test set:
 
-Utility function taken from https://www.kaggle.com/gogo827jz/jane-street-super-fast-utility-score-function
+Reference:
+https://www.kaggle.com/jorijnsmit/found-the-holy-grail-grouptimeseriessplit
+https://www.kaggle.com/tomwarrens/purgedgrouptimeseriessplit-stacking-ensemble-mode
 '''
 
-def utility_score_loop(date, weight, resp, action):
-    count_i = len(np.unique(date))
-    Pi = np.zeros(count_i)
-    for i, day in enumerate(np.unique(date)):
-        Pi[i] = np.sum(weight[date == day] * resp[date == day] * action[date == day])
-    t = np.sum(Pi) / np.sqrt(np.sum(Pi ** 2)) * np.sqrt(250 / count_i)
-    u = np.clip(t, 0, 6) * np.sum(Pi)
-    return u
+with timer("Loading train parquet"):
+    train_parquet = os.path.join(DATA_DIR, 'train.parquet')
+    train = pd.read_parquet(train_parquet)
+# print(train.info())
+simu_test = train[train['date'] > 480].reset_index(drop = True) 
+print(f"Simulated public test file length: {simu_test}")
 
-def utility_score_bincount(date, weight, resp, action):
-    count_i = len(np.unique(date))
-    Pi = np.bincount(date, weight * resp * action)
-    t = np.sum(Pi) / np.sqrt(np.sum(Pi ** 2)) * np.sqrt(250 / count_i)
-    u = np.clip(t, 0, 6) * np.sum(Pi)
-    return u
-
-@njit(fastmath = True)
-def utility_score_numba(date, weight, resp, action):
-    Pi = np.bincount(date, weight * resp * action)
-    t = np.sum(Pi) / np.sqrt(np.sum(Pi ** 2)) * np.sqrt(250 / len(Pi))
-    u = min(max(t, 0), 6) * np.sum(Pi)
-    return u
-
-@njit(fastmath = True)
-def decision_threshold_optimisation(preds, date, weight, resp, low = 0, high = 1, bins = 100, eps = 1):
-    opt_threshold = low
-    gap = (high - low) / bins
-    action = np.where(preds >= opt_threshold, 1, 0)
-    opt_utility = utility_score_numba(date, weight, resp, action)
-    for threshold in np.arange(low, high, gap):
-        action = np.where(preds >= threshold, 1, 0)
-        utility = utility_score_numba(date, weight, resp, action)
-        if utility - opt_utility > eps:
-            opt_threshold = threshold
-            opt_utility = utility
-    print(f'Optimal Decision Threshold:   {opt_threshold}')
-    print(f'Optimal Utility Score:        {opt_utility}')
-    return opt_threshold, opt_utility
-
-@njit
-def fast_fillna(array, values):
-    if np.isnan(array.sum()):
-        array = np.where(np.isnan(array), values, array)
-    return array
+#%%
+# for tr_idx, val_idx in PurgedGroupTimeSeriesSplit().split(train, groups=train['date']):
+#     print(train.loc[tr_idx, 'date'].unique())
+#     print(train.loc[val_idx, 'date'].unique(), '\n\n')
 # %%
 class Iter_Valid(object):
     def __init__(self, df):
@@ -92,8 +63,16 @@ class Iter_Valid(object):
             return self.df, self.pred_df
         else:
             raise StopIteration()
+try:
+    iter_test = Iter_Valid(simu_test)
+except:
+    pass
 
-iter_test = Iter_Valid(simu_test_df)
 predicted = []
+
 def set_predict(df):
     predicted.append(df)
+
+
+# %%
+

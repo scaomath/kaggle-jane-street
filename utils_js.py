@@ -2,9 +2,11 @@ from sklearn.model_selection import KFold
 from sklearn.model_selection._split import _BaseKFold, indexable, _num_samples
 from sklearn.utils.validation import _deprecate_positional_args
 import numpy as np
+from numba import njit
 
 # modified code for group gaps; source
 # https://github.com/getgaurav2/scikit-learn/blob/d4a3af5cc9da3a76f0266932644b884c99724c57/sklearn/model_selection/_split.py#L2243
+
 class PurgedGroupTimeSeriesSplit(_BaseKFold):
     """Time Series cross-validator variant with non-overlapping groups.
     Allows for a gap in groups to avoid potentially leaking info from
@@ -150,6 +152,56 @@ def preprocess(df, drop_weight=True):
     columns += [col for col in df.columns if col not in ['date', 'ts_id', 'action']]
     df = df[columns]
     return df
+
+
+'''
+Simulate the inference env of Kaggle
+Utility function taken from https://www.kaggle.com/gogo827jz/jane-street-super-fast-utility-score-function
+'''
+def utility_score_loop(date, weight, resp, action):
+    count_i = len(np.unique(date))
+    Pi = np.zeros(count_i)
+    for i, day in enumerate(np.unique(date)):
+        Pi[i] = np.sum(weight[date == day] * resp[date == day] * action[date == day])
+    t = np.sum(Pi) / np.sqrt(np.sum(Pi ** 2)) * np.sqrt(250 / count_i)
+    u = np.clip(t, 0, 6) * np.sum(Pi)
+    return u
+
+def utility_score_bincount(date, weight, resp, action):
+    count_i = len(np.unique(date))
+    Pi = np.bincount(date, weight * resp * action)
+    t = np.sum(Pi) / np.sqrt(np.sum(Pi ** 2)) * np.sqrt(250 / count_i)
+    u = np.clip(t, 0, 6) * np.sum(Pi)
+    return u
+
+@njit(fastmath = True)
+def utility_score_numba(date, weight, resp, action):
+    Pi = np.bincount(date, weight * resp * action)
+    t = np.sum(Pi) / np.sqrt(np.sum(Pi ** 2)) * np.sqrt(250 / len(Pi))
+    u = min(max(t, 0), 6) * np.sum(Pi)
+    return u
+
+@njit(fastmath = True)
+def decision_threshold_optimisation(preds, date, weight, resp, low = 0, high = 1, bins = 100, eps = 1):
+    opt_threshold = low
+    gap = (high - low) / bins
+    action = np.where(preds >= opt_threshold, 1, 0)
+    opt_utility = utility_score_numba(date, weight, resp, action)
+    for threshold in np.arange(low, high, gap):
+        action = np.where(preds >= threshold, 1, 0)
+        utility = utility_score_numba(date, weight, resp, action)
+        if utility - opt_utility > eps:
+            opt_threshold = threshold
+            opt_utility = utility
+    print(f'Optimal Decision Threshold:   {opt_threshold}')
+    print(f'Optimal Utility Score:        {opt_utility}')
+    return opt_threshold, opt_utility
+
+@njit
+def fast_fillna(array, values):
+    if np.isnan(array.sum()):
+        array = np.where(np.isnan(array), values, array)
+    return array
 
 if __name__ == "__main__":
     pass
