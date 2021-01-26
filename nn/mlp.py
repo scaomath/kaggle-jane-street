@@ -41,13 +41,11 @@ all_feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
 
 ##### Model&Data fnc
 class ResidualMLP(nn.Module):
-    def __init__(self):
+    def __init__(self, hidden_size=256, dropout_rate=0.2):
         super(ResidualMLP, self).__init__()
         self.batch_norm0 = nn.BatchNorm1d(len(all_feat_cols))
         self.dropout0 = nn.Dropout(0.2)
 
-        dropout_rate = 0.2
-        hidden_size = 256
         self.dense1 = nn.Linear(len(all_feat_cols), hidden_size)
         self.batch_norm1 = nn.BatchNorm1d(hidden_size)
         self.dropout1 = nn.Dropout(dropout_rate)
