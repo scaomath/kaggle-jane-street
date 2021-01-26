@@ -260,9 +260,9 @@ def create_mlp_tf(
     return model
 
 if __name__ == "__main__":
-
+    HOME = os.path.dirname(os.path.abspath(__file__))
     with timer("Loading train parquet"):
-        train_parquet = './data/train.parquet'
+        train_parquet = os.path.join(HOME,'data/train.parquet')
         train = pd.read_parquet(train_parquet)
     train['action'] = (train['resp'] > 0)
     for c in range(1,5):

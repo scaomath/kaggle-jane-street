@@ -118,7 +118,7 @@ def timer(label: str, compact=False) -> None:
     m0 = p.memory_info()[0] / 2. ** 30
     start = time()  # Setup - __enter__
     if not compact:
-        print(color(f"{label}: start at {start:2f};", color=Colors.blue))
+        print(color(f"{label}: start at {start:.2f};", color=Colors.blue))
         print(color(f"LOCAL RAM USAGE AT START: {m0:.2f} GB" , color=Colors.green))
         try:
             yield  # yield to body of `with` statement
@@ -128,7 +128,7 @@ def timer(label: str, compact=False) -> None:
             sign = '+' if delta >= 0 else '-'
             delta = math.fabs(delta)
             end = time()
-            print(color(f"{label}: done at {end:2f} ({end - start:.6f} secs elapsed);", color=Colors.blue))
+            print(color(f"{label}: done at {end:.2f} ({end - start:.6f} secs elapsed);", color=Colors.blue))
             print(color(f"LOCAL RAM USAGE AT END: {m1:.2f}GB ({sign}{delta:.2f}GB)", color=Colors.green))
             print('\n')
     else:
