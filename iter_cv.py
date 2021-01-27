@@ -16,6 +16,7 @@ MODEL_DIR = HOME+'/models/'
 DATA_DIR = HOME+'/data/'
 from utils import *
 from utils_js import *
+# from nn.mlp import *
 
 DEBUG = False
 SEED = 1111
@@ -62,12 +63,12 @@ resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 # X = train[features].values
 # y = np.stack([(train[c] > 0).astype('int') for c in resp_cols]).T #Multitarget
 
-f_mean = np.mean(train[features[1:]].values,axis=0)
+f_mean = np.mean(train[features[1:]].values, axis=0)
 
 simu_test = train.query(f'date > {START_SIMU_TEST} & date <= {END_SIMU_TEST}').reset_index(drop = True) 
-
 print(f"Simulated public test file length: {len(simu_test)}")
-# %%
+
+#%%
 class Iter_Valid(object):
 
     global predicted
@@ -104,10 +105,33 @@ class Iter_Valid(object):
 
     def predict(self,pred_df):
         predicted.append(pred_df)
-
 # %% seed 1111 overfit model
 hidden_units = [150, 150, 150]
 dropout_rates = [0.2, 0.2, 0.2, 0.2]
+
+def create_mlp_tf(
+    num_columns, num_labels, hidden_units, dropout_rates, label_smoothing, learning_rate
+):
+
+    inp = tf.keras.layers.Input(shape=(num_columns,))
+    x = tf.keras.layers.BatchNormalization()(inp)
+    x = tf.keras.layers.Dropout(dropout_rates[0])(x)
+    for i in range(len(hidden_units)):
+        x = tf.keras.layers.Dense(hidden_units[i])(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Activation(tf.keras.activations.swish)(x)
+        x = tf.keras.layers.Dropout(dropout_rates[i + 1])(x)
+
+    x = tf.keras.layers.Dense(num_labels)(x)
+    out = tf.keras.layers.Activation("sigmoid")(x)
+
+    model = tf.keras.models.Model(inputs=inp, outputs=out)
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+        loss=tf.keras.losses.BinaryCrossentropy(label_smoothing=label_smoothing),
+        metrics=tf.keras.metrics.AUC(name="AUC"),
+    )
+    return model
 
 
 model = create_mlp_tf(num_columns=len(features), 

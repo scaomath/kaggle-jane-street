@@ -3,8 +3,10 @@ from sklearn.model_selection._split import _BaseKFold, indexable, _num_samples
 from sklearn.utils.validation import _deprecate_positional_args
 import numpy as np
 from numba import njit
-import tensorflow as tf
 from utils import *
+
+
+
 
 # modified code for group gaps; source
 # https://github.com/getgaurav2/scikit-learn/blob/d4a3af5cc9da3a76f0266932644b884c99724c57/sklearn/model_selection/_split.py#L2243
@@ -248,30 +250,6 @@ def median_avg(predictions, beta=0.5, debug=False):
         print('after_cut',sorted_predictions[mid_point-n_avg//2-1:mid_point+n_avg//2])
     to_avg=sorted_predictions[mid_point-n_avg//2-1:mid_point+n_avg//2]
     return np.mean(to_avg)
-
-def create_mlp_tf(
-    num_columns, num_labels, hidden_units, dropout_rates, label_smoothing, learning_rate
-):
-
-    inp = tf.keras.layers.Input(shape=(num_columns,))
-    x = tf.keras.layers.BatchNormalization()(inp)
-    x = tf.keras.layers.Dropout(dropout_rates[0])(x)
-    for i in range(len(hidden_units)):
-        x = tf.keras.layers.Dense(hidden_units[i])(x)
-        x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Activation(tf.keras.activations.swish)(x)
-        x = tf.keras.layers.Dropout(dropout_rates[i + 1])(x)
-
-    x = tf.keras.layers.Dense(num_labels)(x)
-    out = tf.keras.layers.Activation("sigmoid")(x)
-
-    model = tf.keras.models.Model(inputs=inp, outputs=out)
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
-        loss=tf.keras.losses.BinaryCrossentropy(label_smoothing=label_smoothing),
-        metrics=tf.keras.metrics.AUC(name="AUC"),
-    )
-    return model
 
 if __name__ == "__main__":
     HOME = os.path.dirname(os.path.abspath(__file__))

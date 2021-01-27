@@ -40,6 +40,8 @@ Current NN models use `date>85` and `weight>0`.
 ## AE+MLP+prediction cache
 - Attempt 0.1: simply saving `pred_df.copy()` and using `pd.concat` is way too slow (7-8 iteration/s << 45 which is the current starter's). TO-DO: add a class so that prediction is a function under this class, model outputs to give more information, and some objects "depicting" the current market volatility. 
 
+## A new Residual+MLP model
+- The key is to train using the actual `resp` columns as target, and when doing the inference, apply the sigmoid function to the output.
 
 # Gradient boosting models
 ## XGBoost:
