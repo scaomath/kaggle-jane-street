@@ -18,6 +18,7 @@
 - [x] Stable CV-LB strategy (Update Jan 22, now I think this is somehow impossible)
 - [x] Writing a simple `iter_env` simulator
 - [ ] Testing a moving average `fillna()` strategy
+- [ ] Testing a past mean `fillna()`, fill the NaN using the mean only from prior day data, no intraday data.
 - [ ] Using the `iter_env` simulator to test the impact of different threshold.
 
 # EDA
@@ -27,6 +28,7 @@
 Current NN models use `date>85` and `weight>0`.
 - Current best: Ethan's AE+MLP baseline the last 2 folds, not fine-tune models, with a custom median ensembling.
 - (After debugging) Both custom median (average of middle 50%) and `np.mean` has better public score.
+- Current NN models uses `fillna` either with mean or forward fill, mean performs better on public LB but certain is subject to leakage. 
 
 ## Autoencoder
 - Kaggle Notebook: [https://www.kaggle.com/ztyreg/fork-of-s8900-ts](https://www.kaggle.com/ztyreg/fork-of-s8900-ts)
