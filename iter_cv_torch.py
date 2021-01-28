@@ -19,7 +19,7 @@ from nn.mlp import *
 get_system()
 # %%
 DEBUG = False
-SEED = 1111
+SEED = 1127
 START_SIMU_TEST = 490 # this day to 499 as simulated test days
 END_SIMU_TEST = 499
 TQDM_INT = 20
@@ -111,8 +111,12 @@ if __name__ == '__main__':
 
     5 models, np.median: 1082.92
     5 models, np.mean: 1030.73
-    5 models, median mean: 1067.43
-    5 models, np.median, 0.498 thresh: 1096.3
+    5 models, median avg: 1067.43
+    3 models, np.median, 0.498 thresh: 1096.30
+    3 models, np.median, 0.497 thresh: 1116.35
+    3 models, np.median, 0.496 thresh: 1104.17
+    3 models, np.mean,  0.497 thresh: 1082
+    3 models, np.median, 0.502 thresh: 1088.58
     '''
     date = simu_test['date'].values
     weight = simu_test['weight'].values
@@ -120,11 +124,11 @@ if __name__ == '__main__':
     action = simu_test['action'].values
 
     # f = np.mean # 
-    f = np.median 
-    # f = median_avg 
+    # f = np.median 
+    f = median_avg 
 
-    thresh = 0.497
-
+    thresh = 0.502
+    print(f"\n\nPredicting the action using {thresh:.3f} threshold with {N_MODELS} models.")
     iter_test = Iter_Valid(simu_test, features)
     start = time()
 
