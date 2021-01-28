@@ -3,7 +3,6 @@ import os, sys
 from numpy.lib.function_base import median
 from torchsummary import summary
 
-
 HOME = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(HOME,  'models')
 DATA_DIR = os.path.join(HOME,  'data')
@@ -28,10 +27,15 @@ with timer("Loading train parquet"):
 train = train.loc[train.date > 85].reset_index(drop=True)
 weight_mean = train.loc[train.weight > 0].mean()
 #%%
+train['action_0'] = (train['resp'] > 0).astype('int')
+for c in range(1,5):
+    train['action_'+str(c)] = (train['resp_'+str(c)] > 0).astype('int')
+    print(f'action based on resp_{c} mean: ' ,' '*10, train['action_'+str(c)].astype(int).mean())
+
 train['action'] = (train['resp'] > 0)
 for c in range(1,5):
     train['action'] = train['action'] & (train['resp_'+str(c)] > 0)
-print('All actions mean:       ', train['action'].astype(int).mean())
+print('All actions mean:  ', '  '*10, train['action'].astype(int).mean())
 
 for c in range(1,5):
     train['action_0'+str(c)] = (train['resp'] > 0) & (train['resp_'+str(c)] > 0)
@@ -42,27 +46,26 @@ for i in range(1,5):
         train['action_'+str(i)+str(j)] = (train['resp_'+str(i)] > 0)  & (train['resp_'+str(j)] > 0) 
         print(f'action based on resp_{i} and resp_{j} mean: ', train['action_'+str(i)+str(j)].astype(int).mean())
 
+
 features = [c for c in train.columns if 'feature' in c]
 #%%
 f_mean = np.mean(train[features[1:]].values, axis=0)
 train.fillna(train.mean(),inplace=True)
 #%%
-train['action_0'] = (train['resp'] > 0).astype('int')
-for c in range(1,5):
-    train['action_'+str(c)] = (train['resp_'+str(c)] > 0).astype('int')
 
 valid = train.loc[train.date >= 450].reset_index(drop=True)
 train = train.loc[train.date <= 425].reset_index(drop=True)
 
 resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 weight_resp_cols = ['resp_w', 'resp_w_1', 'resp_w_2', 'resp_w_3', 'resp_w_4']
-target_cols = ['action', 
+target_cols = ['action_0', 'action_1', 'action_2', 'action_3', 'action_4']
+target_cols_all = ['action', 
+               'action_0', 'action_1', 'action_2', 'action_3', 'action_4', 
                'action_01', 'action_02', 'action_03', 'action_04', 
                'action_12', 'action_13', 'action_14', 'action_23', 'action_24', 'action_34']
 
 target_cols_ex = target_cols + resp_cols + weight_resp_cols
 
-#%%
 feat_cols = [f'feature_{i}' for i in range(130)]
 
 train['cross_41_42_43'] = train['feature_41'] + train['feature_42'] + train['feature_43']
@@ -77,7 +80,7 @@ feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
 train_set = MarketDataset(train, features=feat_cols, targets=target_cols)
 train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
 
-valid_set = MarketDataset(valid, features=feat_cols,targets=target_cols)
+valid_set = MarketDataset(valid, features=feat_cols, targets=target_cols)
 valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
 # %%
 model = ResidualMLP(output_size=len(target_cols))

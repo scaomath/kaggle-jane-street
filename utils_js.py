@@ -238,7 +238,7 @@ def fast_fillna(array, values):
 
 def median_avg(predictions, beta=0.5, axis=-1, debug=False):
     '''
-    predictions should be of a vector shape n_models
+    predictions should be of a vector shape (..., n_models)
     beta: if beta is 0.5, then the middle 50% will be averaged
     '''
     sorted_predictions = np.sort(predictions, axis=axis)
@@ -249,7 +249,7 @@ def median_avg(predictions, beta=0.5, axis=-1, debug=False):
         print('sorted_list',sorted_predictions)
         print('after_cut',sorted_predictions[..., mid_point-n_avg//2-1:mid_point+n_avg//2])
     to_avg = sorted_predictions[..., mid_point-n_avg//2-1:mid_point+n_avg//2]
-    return np.mean(to_avg)
+    return np.mean(to_avg, axis=axis)
 
 if __name__ == "__main__":
     HOME = os.path.dirname(os.path.abspath(__file__))
