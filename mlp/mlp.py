@@ -2,8 +2,12 @@
 import warnings
 warnings.filterwarnings('ignore')
 
+import datetime
 import os
 import sys
+import warnings
+from collections import defaultdict
+from itertools import chain
 
 import numpy as np
 import pandas as pd
@@ -11,12 +15,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.metrics import log_loss, roc_auc_score
+
 from torch.autograd import Variable
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn.modules.loss import _WeightedLoss
+from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import datetime
 
 CURRENT = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.dirname(CURRENT)
@@ -24,6 +29,7 @@ MODEL_DIR = os.path.join(HOME,  'models')
 DATA_DIR = os.path.join(HOME,  'data')
 sys.path.append(HOME) 
 from utils import *
+from utils_js import *
 
 #%%
 NFOLDS = 5
@@ -114,12 +120,32 @@ class ResidualMLP(nn.Module):
 
         return x
 
+class RunningEWMean:
+    def __init__(self, WIN_SIZE=20, n_size=1, lt_mean=None):
+        if lt_mean is not None:
+            self.s = lt_mean
+        else:
+            self.s = np.zeros(n_size)
+        self.past_value = np.zeros(n_size)
+        self.alpha = 2 / (WIN_SIZE + 1)
+
+    def clear(self):
+        self.s = 0
+
+    def push(self, x):
+        x = fast_fillna(x, self.past_value)
+        self.past_value = x
+        self.s = self.alpha * x + (1 - self.alpha) * self.s
+
+    def get_mean(self):
+        return self.s
 
 class MarketDataset:
-    def __init__(self, df):
+    def __init__(self, df, 
+                       features=all_feat_cols, 
+                       targets=target_cols):
         self.features = df[features].values
-
-        self.label = (df['resp'] > 0).astype('int').values.reshape(-1, 1)
+        self.label = df[targets].astype('float').values.reshape(-1, len(target_cols))
 
     def __len__(self):
         return len(self.label)
@@ -129,6 +155,22 @@ class MarketDataset:
             'features': torch.tensor(self.features[idx], dtype=torch.float),
             'label': torch.tensor(self.label[idx], dtype=torch.float)
         }
+
+# class ExtendedMarketDataset:
+#     def __init__(self, df, features=feat_cols, targets=target_cols):
+#         self.features = df[features].values
+#         self.label = df[targets].astype('int').values.reshape(-1, len(target_cols))
+#         self.exlabel = (df['resp'] * (df['weight'] + 1e-6)).astype('float').values.reshape(-1, 1)
+
+#     def __len__(self):
+#         return len(self.label)
+
+#     def __getitem__(self, idx):
+#         return {
+#             'features': torch.tensor(self.features[idx], dtype=torch.float),
+#             'label': torch.tensor(self.label[idx], dtype=torch.float),
+#             'exlabel':torch.tensor(self.exlabel[idx], dtype=torch.float),
+#         }
 
 class SmoothBCEwLogits(_WeightedLoss):
     def __init__(self, weight=None, reduction='mean', smoothing=0.0):
@@ -196,6 +238,79 @@ class EarlyStopping:
             print('Validation score improved ({} --> {}). Saving model!'.format(self.val_score, epoch_score))
             torch.save(model.state_dict(), model_path)
         self.val_score = epoch_score
+
+
+
+
+class Lookahead(Optimizer):
+    '''
+    https://github.com/alphadl/lookahead.pytorch
+    '''
+    def __init__(self, optimizer, k=5, alpha=0.5):
+        self.optimizer = optimizer
+        self.k = k
+        self.alpha = alpha
+        self.param_groups = self.optimizer.param_groups
+        self.state = defaultdict(dict)
+        self.fast_state = self.optimizer.state
+        for group in self.param_groups:
+            group["counter"] = 0
+    
+    def update(self, group):
+        for fast in group["params"]:
+            param_state = self.state[fast]
+            if "slow_param" not in param_state:
+                param_state["slow_param"] = torch.zeros_like(fast.data)
+                param_state["slow_param"].copy_(fast.data)
+            slow = param_state["slow_param"]
+            slow += (fast.data - slow) * self.alpha
+            fast.data.copy_(slow)
+    
+    def update_lookahead(self):
+        for group in self.param_groups:
+            self.update(group)
+
+    def step(self, closure=None):
+        loss = self.optimizer.step(closure)
+        for group in self.param_groups:
+            if group["counter"] == 0:
+                self.update(group)
+            group["counter"] += 1
+            if group["counter"] >= self.k:
+                group["counter"] = 0
+        return loss
+
+    def state_dict(self):
+        fast_state_dict = self.optimizer.state_dict()
+        slow_state = {
+            (id(k) if isinstance(k, torch.Tensor) else k): v
+            for k, v in self.state.items()
+        }
+        fast_state = fast_state_dict["state"]
+        param_groups = fast_state_dict["param_groups"]
+        return {
+            "fast_state": fast_state,
+            "slow_state": slow_state,
+            "param_groups": param_groups,
+        }
+
+    def load_state_dict(self, state_dict):
+        slow_state_dict = {
+            "state": state_dict["slow_state"],
+            "param_groups": state_dict["param_groups"],
+        }
+        fast_state_dict = {
+            "state": state_dict["fast_state"],
+            "param_groups": state_dict["param_groups"],
+        }
+        super(Lookahead, self).load_state_dict(slow_state_dict)
+        self.optimizer.load_state_dict(fast_state_dict)
+        self.fast_state = self.optimizer.state
+
+    def add_param_group(self, param_group):
+        param_group["counter"] = 0
+        self.optimizer.add_param_group(param_group)
+
 
 def train_epoch(model, optimizer, scheduler, loss_fn, dataloader, device):
     model.train()

@@ -15,7 +15,7 @@ MODEL_DIR = HOME+'/models/'
 DATA_DIR = HOME+'/data/'
 from utils import *
 from utils_js import *
-from nn.mlp import *
+from mlp.mlp import *
 get_system()
 # %%
 DEBUG = False
