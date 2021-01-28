@@ -34,9 +34,8 @@ from utils_js import *
 #%%
 NFOLDS = 5
 
-
 feat_cols = [f'feature_{i}' for i in range(130)]
-
+resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 target_cols = ['action', 'action_1', 'action_2', 'action_3', 'action_4']
 
 f_mean = np.load(os.path.join(DATA_DIR,'f_mean.npy'))
@@ -47,7 +46,9 @@ all_feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
 
 ##### Model&Data fnc
 class ResidualMLP(nn.Module):
-    def __init__(self, hidden_size=256, dropout_rate=0.2):
+    def __init__(self, hidden_size=256, 
+                       output_size=len(target_cols), 
+                       dropout_rate=0.2):
         super(ResidualMLP, self).__init__()
         self.batch_norm0 = nn.BatchNorm1d(len(all_feat_cols))
         self.dropout0 = nn.Dropout(0.2)
@@ -68,7 +69,7 @@ class ResidualMLP(nn.Module):
         self.batch_norm4 = nn.BatchNorm1d(hidden_size)
         self.dropout4 = nn.Dropout(dropout_rate)
 
-        self.dense5 = nn.Linear(hidden_size+hidden_size, len(target_cols))
+        self.dense5 = nn.Linear(hidden_size+hidden_size, output_size)
 
         self.Relu = nn.ReLU(inplace=True)
         self.PReLU = nn.PReLU()
@@ -145,7 +146,7 @@ class MarketDataset:
                        features=all_feat_cols, 
                        targets=target_cols):
         self.features = df[features].values
-        self.label = df[targets].astype('float').values.reshape(-1, len(target_cols))
+        self.label = df[targets].astype('float').values.reshape(-1, len(targets))
 
     def __len__(self):
         return len(self.label)
@@ -156,21 +157,23 @@ class MarketDataset:
             'label': torch.tensor(self.label[idx], dtype=torch.float)
         }
 
-# class ExtendedMarketDataset:
-#     def __init__(self, df, features=feat_cols, targets=target_cols):
-#         self.features = df[features].values
-#         self.label = df[targets].astype('int').values.reshape(-1, len(target_cols))
-#         self.exlabel = (df['resp'] * (df['weight'] + 1e-6)).astype('float').values.reshape(-1, 1)
+class ExtendedMarketDataset:
+    def __init__(self, df, features=feat_cols, 
+                           targets=target_cols,
+                           extargets=resp_cols):
+        self.features = df[features].values
+        self.label = df[targets].astype('int').values.reshape(-1, len(targets))
+        self.exlabel = df[extargets].astype('float').values.reshape(-1, len(extargets))
 
-#     def __len__(self):
-#         return len(self.label)
+    def __len__(self):
+        return len(self.label)
 
-#     def __getitem__(self, idx):
-#         return {
-#             'features': torch.tensor(self.features[idx], dtype=torch.float),
-#             'label': torch.tensor(self.label[idx], dtype=torch.float),
-#             'exlabel':torch.tensor(self.exlabel[idx], dtype=torch.float),
-#         }
+    def __getitem__(self, idx):
+        return {
+            'features': torch.tensor(self.features[idx], dtype=torch.float),
+            'label': torch.tensor(self.label[idx], dtype=torch.float),
+            'exlabel':torch.tensor(self.exlabel[idx], dtype=torch.float),
+        }
 
 class SmoothBCEwLogits(_WeightedLoss):
     def __init__(self, weight=None, reduction='mean', smoothing=0.0):
@@ -210,6 +213,7 @@ class EarlyStopping:
             self.val_score = np.Inf
         else:
             self.val_score = -np.Inf
+        self.message = ''
 
     def __call__(self, epoch_score, model, model_path):
 
@@ -223,7 +227,7 @@ class EarlyStopping:
             self.save_checkpoint(epoch_score, model, model_path)
         elif score < self.best_score: #  + self.delta
             self.counter += 1
-            print('EarlyStopping counter: {} out of {}'.format(self.counter, self.patience))
+            _ = f'EarlyStopping counter: {self.counter} out of {self.patience}'
             if self.counter >= self.patience:
                 self.early_stop = True
         else:
@@ -235,7 +239,7 @@ class EarlyStopping:
 
     def save_checkpoint(self, epoch_score, model, model_path):
         if epoch_score not in [-np.inf, np.inf, -np.nan, np.nan]:
-            print('Validation score improved ({} --> {}). Saving model!'.format(self.val_score, epoch_score))
+            _ = f'Validation score improved ({self.val_score} --> {epoch_score})'
             torch.save(model.state_dict(), model_path)
         self.val_score = epoch_score
 
