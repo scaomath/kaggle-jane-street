@@ -1,5 +1,6 @@
 #%%
 import os, sys
+from numpy.lib.function_base import median
 from torchsummary import summary
 
 
@@ -15,7 +16,7 @@ EPOCHS = 200
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-5
 EARLYSTOP_NUM = 3
-SEED = 1127
+
 SCALING = 1000
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -91,7 +92,12 @@ scheduler = None
 loss_fn = SmoothBCEwLogits(smoothing=0.01)
 model_file = MODEL_DIR+f"/pt_resmlp_{SEED}.pth"
 es = EarlyStopping(patience=EARLYSTOP_NUM, mode="max")
+SEED = 802
+get_seed(SEED)
 # %%
+# f = np.median
+f = median_avg
+
 with tqdm(total=EPOCHS) as pbar:
     for epoch in range(EPOCHS):
 
@@ -101,7 +107,7 @@ with tqdm(total=EPOCHS) as pbar:
         valid_pred = valid_epoch(model, valid_loader, device)
         valid_auc = roc_auc_score(valid[target_cols].values.reshape(-1), valid_pred)
         valid_logloss = log_loss(valid[target_cols].values.reshape(-1), valid_pred)
-        valid_pred = np.median(valid_pred.reshape(-1, len(target_cols)), axis=1)
+        valid_pred = f(valid_pred.reshape(-1, len(target_cols)), axis=-1)
         valid_pred = np.where(valid_pred >= 0.5, 1, 0).astype(int)
         valid_u_score = utility_score_bincount(date=valid.date.values, weight=valid.weight.values,
                                                 resp=valid.resp.values, action=valid_pred)
