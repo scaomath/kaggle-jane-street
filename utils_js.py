@@ -260,14 +260,17 @@ if __name__ == "__main__":
     for c in range(1,5):
         train['action'] = train['action'] & ((train['resp_'+str(c)] > 0))
     
+    train = train.query('date > 296').reset_index(drop=True)
+
     date = train['date'].values
     weight = train['weight'].values
     resp = train['resp'].values
     action = train['action'].values
 
-
+    print(f"Number of rows in train: {len(train)}")
 
     with timer("Numba", compact=True):
+        utility_score_numba(date[:1], weight[:1], resp[:1], action[:1])
         print(utility_score_numba(date, weight, resp, action))
 
     with timer("numpy", compact=True): # fastest
