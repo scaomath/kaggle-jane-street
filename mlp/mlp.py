@@ -205,22 +205,25 @@ class EarlyStopping:
     def __init__(self, patience=7, mode="max", delta=0.):
         self.patience = patience
         self.counter = 0
+        self.util_counter = 0
         self.mode = mode
         self.best_score = None
+        self.best_utility_score = None
         self.early_stop = False
         self.delta = delta
         if self.mode == "min":
             self.val_score = np.Inf
         else:
             self.val_score = -np.Inf
-        self.message = ''
+        self.model_saved = False
 
-    def __call__(self, epoch_score, model, model_path):
+    def __call__(self, epoch_score, model, model_path, epoch_utility_score):
 
         if self.mode == "min":
             score = -1.0 * epoch_score
         else:
             score = np.copy(epoch_score)
+        util_score = epoch_utility_score
 
         if self.best_score is None:
             self.best_score = score
@@ -230,17 +233,32 @@ class EarlyStopping:
             _ = f'EarlyStopping counter: {self.counter} out of {self.patience}'
             if self.counter >= self.patience:
                 self.early_stop = True
+            self.model_saved = False
         else:
             self.best_score = score
-            # ema.apply_shadow()
             self.save_checkpoint(epoch_score, model, model_path)
-            # ema.restore()
             self.counter = 0
+            self.model_saved = True
+
+        if self.best_utility_score is None:
+            self.best_utility_score = util_score
+        elif util_score < self.best_utility_score:
+            self.util_counter += 1
+            _ = f'EarlyStopping counter: {self.util_counter} out of {self.patience}'
+            if self.util_counter >= self.patience + 5: # a harder offset
+                self.early_stop = True
+            self.model_saved = False
+        else:
+            _ = f'Utility score :({self.best_utility_score} --> {util_score}); model saved.'
+            self.best_utility_score = util_score
+            self.save_checkpoint(epoch_score, model, model_path)
+            self.util_counter = 0
+            self.model_saved = True
 
     def save_checkpoint(self, epoch_score, model, model_path):
         if epoch_score not in [-np.inf, np.inf, -np.nan, np.nan]:
-            _ = f'Validation score improved ({self.val_score} --> {epoch_score})'
             torch.save(model.state_dict(), model_path)
+            _ = f'Validation score improved ({self.val_score} --> {epoch_score})'
         self.val_score = epoch_score
 
 

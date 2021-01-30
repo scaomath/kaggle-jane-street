@@ -19,7 +19,7 @@
 - [x] Writing a simple `iter_env` simulator
 - [ ] Testing a moving average `fillna()` strategy
 - [ ] Testing a past mean `fillna()`, fill the NaN using the mean only from prior day data, no intraday data.
-- [ ] Using the `iter_env` simulator to test the impact of different threshold.
+- [x] Using the `iter_env` simulator to test the impact of different threshold: 0.502 or 0.498 can be both better than 0.5? Need an explanation...
 
 # EDA
 - Only 35%-40% of the samples have `action` being 1, depending on the CV split.
@@ -43,7 +43,8 @@ Current NN models use `date>85` and `weight>0`.
 - Attempt 0.1: simply saving `pred_df.copy()` and using `pd.concat` is way too slow (7-8 iteration/s << 45 which is the current starter's). TO-DO: add a class so that prediction is a function under this class, model outputs to give more information, and some objects "depicting" the current market volatility. 
 
 ## A new Residual+MLP model
-- The key is to train using the actual `resp` columns as target, and when doing the inference, apply the sigmoid function to the output.
+- The key is to train using the actual `resp` columns as target, and when doing the inference, apply the sigmoid function to the output (why `BCEwLogits` performs better than `CrossEntropy`???).
+- Set up the baseline training, adding a 16-target model (using various sums between the `resp` columns).
 
 # Gradient boosting models
 ## XGBoost:

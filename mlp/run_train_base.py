@@ -3,20 +3,27 @@ import os, sys
 from numpy.lib.function_base import median
 from torchsummary import summary
 
-HOME = os.path.dirname(os.path.abspath(__file__))
+current_path = os.path.dirname(os.path.abspath(__file__))
+HOME = os.path.dirname(current_path)
 MODEL_DIR = os.path.join(HOME,  'models')
 DATA_DIR = os.path.join(HOME,  'data')
 sys.path.append(HOME) 
 from utils import *
-from mlp.mlp import *
+from mlp import *
 # %%
 BATCH_SIZE = 4096
 EPOCHS = 200
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-5
 EARLYSTOP_NUM = 5
 NFOLDS = 1
 SCALING = 1000
+THRESHOLD = 0.5
+SEED = 802
+get_seed(SEED)
+# f = np.median
+# f = np.mean
+f = median_avg
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #%%
@@ -90,19 +97,16 @@ model.to(device)
 summary(model, input_size=(len(feat_cols), ))
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-# optimizer = Lookahead(optimizer=optimizer, k=10, alpha=0.5)
+optimizer = Lookahead(optimizer=optimizer, k=10, alpha=0.5)
 scheduler = None
 # scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer=optimizer, pct_start=0.1, div_factor=1e3,
 #                                                 max_lr=1e-2, epochs=EPOCHS, 
 #                                                 steps_per_epoch=len(train_loader))
 loss_fn = SmoothBCEwLogits(smoothing=0.01)
-model_file = MODEL_DIR+f"/pt_resmlp_{SEED}.pth"
+
 es = EarlyStopping(patience=EARLYSTOP_NUM, mode="max")
-SEED = 802
-get_seed(SEED)
+
 # %%
-# f = np.median
-f = median_avg
 
 with tqdm(total=EPOCHS) as pbar:
     for epoch in range(EPOCHS):
@@ -116,21 +120,21 @@ with tqdm(total=EPOCHS) as pbar:
         valid_pred = valid_pred.reshape(-1, len(target_cols_all))
         # valid_pred = f(valid_pred[...,:len(target_cols)], axis=-1) # only do first 5
         valid_pred = f(valid_pred, axis=-1) # all
-        valid_pred = np.where(valid_pred >= 0.5, 1, 0).astype(int)
-        valid_u_score = utility_score_bincount(date=valid.date.values, 
-                                               weight=valid.weight.values,
-                                               resp=valid.resp.values, 
-                                               action=valid_pred)
-        es(valid_auc, model, model_path=model_file)
+        valid_pred = np.where(valid_pred >= THRESHOLD, 1, 0).astype(int)
+        valid_score = utility_score_bincount(date=valid.date.values, 
+                                            weight=valid.weight.values,
+                                            resp=valid.resp.values, 
+                                            action=valid_pred)
+        model_file = MODEL_DIR+f"/resmlp_seed_{SEED}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
+        es(valid_auc, model, model_path=model_file, epoch_utility_score=valid_score)
 
-        pbar.set_description(f"EPOCH:{epoch:3} tr_loss:{train_loss:.5f} "
-                    f"val_u_score:{valid_u_score:.5f} valid_auc:{valid_auc:.5f} "
-                    f"epoch time: {time() - start_time:.1f}sec "
+        pbar.set_description(f"EPOCH:{epoch:2d} tr_loss:{train_loss:.2f}  "
+                    f"val_utitlity:{valid_score:.2f} valid_auc:{valid_auc:.4f}  "
+                    f"epoch time: {time() - start_time:.1f}sec  "
                     f"early stop counter: {es.counter}")
         
         if es.early_stop:
-            print("\n\nEarly stopping")
-            # torch.save(model.state_dict(), model_file)
+            print("\nEarly stopping")
             break
         pbar.update()
 #%%
@@ -141,18 +145,22 @@ if True:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = ResidualMLP(output_size=len(target_cols_all))
         model.to(device)
-        model_file = MODEL_DIR+f"/pt_resmlp_{SEED}.pth"
+        model_file = MODEL_DIR + '/resmlp_seed_802_util_2413_auc_0.5475.pth'
+        # model_file = MODEL_DIR+f"/resmlp_seed_{SEED}_util_2217_auc_0.5526.pth"
+        # model_file = MODEL_DIR + '/resmlp_seed_802_util_2229.pth'
         model.load_state_dict(torch.load(model_file))
         valid_pred_fold = valid_epoch(model, valid_loader, device).reshape(-1, len(target_cols_all))
         valid_pred += valid_pred_fold / NFOLDS
-    auc_score = roc_auc_score(valid[target_cols_all].values, valid_pred)
-    logloss_score = log_loss(valid[target_cols_all].values, valid_pred)
+    valid_auc = roc_auc_score(valid[target_cols_all].values.astype(float), valid_pred)
+    logloss_score = log_loss(valid[target_cols_all].values.astype(float), valid_pred)
 
-    valid_pred = f(valid_pred[...,:len(target_cols)], axis=-1) # only first 5
-    valid_pred = np.where(valid_pred >= 0.5, 1, 0).astype(int)
+    # valid_pred = f(valid_pred[...,:len(target_cols)], axis=-1) # only first 5
+    valid_pred = f(valid_pred, axis=-1) # all
+    valid_pred = np.where(valid_pred >= THRESHOLD, 1, 0).astype(int)
     valid_score = utility_score_bincount(date=valid.date.values, 
                                          weight=valid.weight.values, 
                                          resp=valid.resp.values,
                                          action=valid_pred)
-    print(f'{NFOLDS} models valid score: {valid_score}\tauc_score: {auc_score:.4f}\tlogloss_score:{logloss_score:.4f}')
+    print(f'{NFOLDS} models valid score: {valid_score:.2f}') 
+    print(f'auc_score: {valid_auc:.4f} \t logloss_score: {logloss_score:.4f}')
 # %%
