@@ -56,9 +56,10 @@ for i in range(1,5):
         train['action_'+str(i)+str(j)] = (train['resp_'+str(i)] + train['resp_'+str(j)] > 0) 
         print(f'action based on resp_{i} and resp_{j} mean: ', train['action_'+str(i)+str(j)].astype(int).mean())
 
-features = [c for c in train.columns if 'feature' in c]
 #%%
-f_mean = np.mean(train[features[1:]].values, axis=0)
+feat_cols = [f'feature_{i}' for i in range(130)]
+# feat_cols = [c for c in train.columns if 'feature' in c]
+f_mean = np.mean(train[feat_cols[1:]].values, axis=0)
 train.fillna(train.mean(),inplace=True)
 
 valid = train.loc[train.date >= 450].reset_index(drop=True)
@@ -74,8 +75,6 @@ target_cols_all = ['action',
                'action_12', 'action_13', 'action_14', 'action_23', 'action_24', 'action_34']
 
 target_cols_ex = target_cols + resp_cols + weight_resp_cols
-
-feat_cols = [f'feature_{i}' for i in range(130)]
 
 train['cross_41_42_43'] = train['feature_41'] + train['feature_42'] + train['feature_43']
 train['cross_1_2'] = train['feature_1'] / (train['feature_2'] + 1e-5)
@@ -161,6 +160,11 @@ if True:
                                          weight=valid.weight.values, 
                                          resp=valid.resp.values,
                                          action=valid_pred)
+    valid_score_max = utility_score_bincount(date=valid.date.values, 
+                                         weight=valid.weight.values, 
+                                         resp=valid.resp.values,
+                                         action=(valid.resp.values>0))
     print(f'{NFOLDS} models valid score: {valid_score:.2f}') 
+    print(f'Max possible valid score: {valid_score_max:.2f}')
     print(f'auc_score: {valid_auc:.4f} \t logloss_score: {logloss_score:.4f}')
 # %%

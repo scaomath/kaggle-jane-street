@@ -385,3 +385,4 @@ if __name__ == '__main__':
         summary(model, input_size=(132, ))
     except ImportError as e:
         print(f"{str(datetime.datetime.now())} Import error {e}")
+
