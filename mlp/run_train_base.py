@@ -1,6 +1,5 @@
 #%%
 import os, sys
-from numpy.lib.function_base import median
 from torchsummary import summary
 
 current_path = os.path.dirname(os.path.abspath(__file__))
