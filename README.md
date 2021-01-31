@@ -21,6 +21,8 @@
 - [ ] Testing a past mean `fillna()`, fill the NaN using the mean only from prior day data, no intraday data.
 - [x] Using the `iter_env` simulator to test the impact of different threshold: 0.502 or 0.498 can be both better than 0.5? Need an explanation...
 - [ ] A table compiling what features will be using `ffill`, previous day mean, overall mean, etc.
+- [ ] Trading frequency can be determined by number of trades per day, store this in a cache to choose model.
+- [ ] Using `feature_0` to choose models.
 - [ ] Using rolling mean of previous days as input, working out a submission pipeline.
 - [ ] Implement a regularizer using the utility function.
 
