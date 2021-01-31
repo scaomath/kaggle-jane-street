@@ -5,6 +5,7 @@ os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 import random as rd
 from contextlib import contextmanager
 from time import time
+import matplotlib.pyplot as plt
 from datetime import date
 import math
 import numpy as np
@@ -170,6 +171,10 @@ def trace(title: str):
     delta = math.fabs(delta)
     print(f"[{m1:.1f}GB ({sign}{delta:.3f}GB): {time() - t0:.2f}sec] {title} ", file=sys.stderr)
 
+def get_cmap(n, cmap='hsv'):
+    '''Returns a function that maps each index in 0, 1, ..., n-1 to a distinct 
+    RGB color; the keyword argument name must be a standard mpl colormap name.'''
+    return plt.cm.get_cmap(cmap, n)
 
 def get_date():
     today = date.today()
