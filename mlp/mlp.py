@@ -382,7 +382,7 @@ if __name__ == '__main__':
 
     try:
         from torchsummary import summary
-        summary(model, input_size=(132, ))
+        summary(model, input_size=(len(all_feat_cols), ))
     except ImportError as e:
         print(f"{str(datetime.datetime.now())} Import error {e}")
 

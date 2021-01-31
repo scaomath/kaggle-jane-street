@@ -24,6 +24,8 @@ model_list = [MODEL_DIR+f'/resmlp_{i}.pth' for i in range(N_FOLDS)] # baseline
 
 feat_cols = [f'feature_{i}' for i in range(130)]
 feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
+# f = median_avg
+f = np.median
 
 #%%
 
@@ -68,6 +70,7 @@ def load_models(pt_model_files):
 
 
 def cv_score(valid_df, models, f=np.mean, thresh=0.5, device=None):
+    print(f"Using {f.__qualname__} as ensembler.")
     if device is None: 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     valid_pred = np.zeros((len(valid_df), len(target_cols)))
@@ -111,7 +114,7 @@ if __name__ == '__main__':
             valid_set = MarketDataset(valid, features=feat_cols, targets=target_cols)
             valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
         models = load_models(model_list)
-        cv_score(valid, models, f=median_avg)
+        cv_score(valid, models, f=f)
 
 
     '''
