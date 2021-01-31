@@ -12,8 +12,8 @@
 
 
 
-# TO-DO:
-- [ ] EDA
+# TO-DO before final submission:
+- [x] EDA
 - [x] A simple starter
 - [x] Stable CV-LB strategy (Update Jan 22, now I think this is somehow impossible)
 - [x] Writing a simple `iter_env` simulator
@@ -21,6 +21,8 @@
 - [ ] Testing a past mean `fillna()`, fill the NaN using the mean only from prior day data, no intraday data.
 - [x] Using the `iter_env` simulator to test the impact of different threshold: 0.502 or 0.498 can be both better than 0.5? Need an explanation...
 - [ ] A table compiling what features will be using `ffill`, previous day mean, overall mean, etc.
+- [ ] Using rolling mean of previous days as input, working out a submission pipeline.
+- [ ] Implement a regularizer using the utility function.
 
 # EDA
 - Only 35%-40% of the samples have `action` being 1, depending on the CV split.
