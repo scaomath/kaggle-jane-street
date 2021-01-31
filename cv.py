@@ -74,11 +74,11 @@ def cv_score(valid_df, models, f=np.mean, thresh=0.5, device=None):
     valid_set = MarketDataset(valid_df, features=feat_cols, targets=target_cols)
     valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
 
-    for _fold in range(N_FOLDS):
+    for _fold in range(len(models)):
         torch.cuda.empty_cache()
         model = models[_fold]
         valid_pred_fold = valid_epoch(model, valid_loader, device).reshape(-1, len(target_cols))
-        valid_pred += valid_pred_fold / N_FOLDS
+        valid_pred += valid_pred_fold / len(models)
     valid_auc = roc_auc_score(valid[target_cols].values.astype(float), valid_pred)
     logloss_score = log_loss(valid[target_cols].values.astype(float), valid_pred)
 
@@ -94,13 +94,13 @@ def cv_score(valid_df, models, f=np.mean, thresh=0.5, device=None):
                                          resp=valid.resp.values,
                                          action=(valid.resp.values>0))
     print(f'Max utils score: {valid_score_max:.2f}') 
-    print(f'{NFOLDS} models valid score: {valid_score:.2f} \t auc: {valid_auc:.4f}') 
+    print(f'{len(models)} models valid score: {valid_score:.2f} \t auc: {valid_auc:.4f}') 
 
 
 # %%
 if __name__ == '__main__':
 
-    print(f"Current valid set is date after {VALID_DATE}.")
+    print(f"Current valid set is date after {VALID_DATE}.\n")
     valid_parquet = find_files('valid.parquet', DATA_DIR)
     if not valid_parquet:
         with timer("Generating validation df"):
@@ -112,3 +112,16 @@ if __name__ == '__main__':
             valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
         models = load_models(model_list)
         cv_score(valid, models, f=median_avg)
+
+
+    '''
+    Lindada's model scores on date > 450:
+    model 0:  4948
+    model 1:  5641
+    model 2:  5282
+    model 3:  5825
+    model 4:  5849
+    all five: 6165
+    '''
+
+# %%
