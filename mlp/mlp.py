@@ -36,7 +36,7 @@ NFOLDS = 5
 
 feat_cols = [f'feature_{i}' for i in range(130)]
 resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
-target_cols = ['action', 'action_1', 'action_2', 'action_3', 'action_4']
+target_cols = ['action_0', 'action_1', 'action_2', 'action_3', 'action_4']
 
 f_mean = np.load(os.path.join(DATA_DIR,'f_mean.npy'))
 
@@ -160,10 +160,14 @@ class MarketDataset:
 class ExtendedMarketDataset:
     def __init__(self, df, features=feat_cols, 
                            targets=target_cols,
-                           extargets=resp_cols):
+                           resp = resp_cols,
+                           date='date',
+                           weight='weight'):
         self.features = df[features].values
         self.label = df[targets].astype('int').values.reshape(-1, len(targets))
-        self.exlabel = df[extargets].astype('float').values.reshape(-1, len(extargets))
+        self.resp = df[resp].astype('float').values.reshape(-1, len(resp))
+        self.date = df[date].astype('int').values.reshape(-1,1)
+        self.weight = df[weight].astype('float').values.reshape(-1,1)
 
     def __len__(self):
         return len(self.label)
@@ -172,7 +176,9 @@ class ExtendedMarketDataset:
         return {
             'features': torch.tensor(self.features[idx], dtype=torch.float),
             'label': torch.tensor(self.label[idx], dtype=torch.float),
-            'exlabel':torch.tensor(self.exlabel[idx], dtype=torch.float),
+            'resp':torch.tensor(self.resp[idx], dtype=torch.float),
+            'date':torch.tensor(self.date[idx], dtype=torch.int32),
+            'weight':torch.tensor(self.weight[idx], dtype=torch.float),
         }
 
 class SmoothBCEwLogits(_WeightedLoss):
@@ -192,7 +198,7 @@ class SmoothBCEwLogits(_WeightedLoss):
     def forward(self, inputs, targets):
         targets = SmoothBCEwLogits._smooth(targets, inputs.size(-1),
             self.smoothing)
-        loss = F.binary_cross_entropy_with_logits(inputs, targets,self.weight)
+        loss = F.binary_cross_entropy_with_logits(inputs, targets, self.weight)
 
         if  self.reduction == 'sum':
             loss = loss.sum()
@@ -200,6 +206,33 @@ class SmoothBCEwLogits(_WeightedLoss):
             loss = loss.mean()
 
         return loss
+
+
+class UtilityLoss(nn.Module):
+    def __init__(self, weight=None, alpha=None, scaling=None, reduction='mean'):
+        super(UtilityLoss, self).__init__()
+        self.alpha = alpha # the final scaling
+        self.reduction = reduction
+        self.scaling = scaling
+        self.weight = weight
+
+    def forward(self, inputs, targets, weight=None, date=None):
+        '''
+        inputs: prediction of the model (without sigmoid, processed with a scaling)
+        targets: resp columns
+        negative of the utility for minimization
+        '''
+    
+        inputs = F.sigmoid(self.scaling*inputs)       
+        
+        #flatten label and prediction tensors
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+        
+        # a single day
+        Pi = torch.bincount(date, weight * targets * inputs)
+        loss = (Pi.sum()).square()/(Pi.square().sum())
+        return -self.alpha*loss
 
 class EarlyStopping:
     def __init__(self, patience=7, mode="max", delta=0.):
@@ -344,6 +377,31 @@ def train_epoch(model, optimizer, scheduler, loss_fn, dataloader, device):
         label = data['label'].to(device)
         outputs = model(features)
         loss = loss_fn(outputs, label)
+        loss.backward()
+        optimizer.step()
+        if scheduler:
+            scheduler.step()
+
+        final_loss += loss.item()
+
+    final_loss /= len(dataloader)
+
+    return final_loss
+
+def train_epoch_utility(model, optimizer, scheduler, loss_fn, regularizer, dataloader, device):
+    model.train()
+    final_loss = 0
+
+    for data in dataloader:
+        optimizer.zero_grad()
+        features = data['features'].to(device)
+        label = data['label'].to(device)
+        weight = data['weight'].to(device)
+        resp = data['resp'].to(device)
+        date = data['date'].to(device)
+        outputs = model(features)
+        loss = loss_fn(outputs, label)
+        loss += regularizer(outputs, resp, weight=weight, date=date)
         loss.backward()
         optimizer.step()
         if scheduler:

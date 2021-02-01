@@ -25,6 +25,7 @@
 - [ ] Using `feature_0` to choose models.
 - [ ] Using rolling mean of previous days as input, working out a submission pipeline.
 - [ ] Implement a regularizer using the utility function.
+- [ ] Pretrain with all weights (maybe making `weight==0` rows' weights to certain small number), then train with all positive `weight` rows.
 
 # EDA
 - Only 35%-40% of the samples have `action` being 1, depending on the CV split.

@@ -137,7 +137,7 @@ class PurgedGroupTimeSeriesSplit(_BaseKFold):
 
 
 
-def preprocess(df, drop_weight=True):
+def preprocess_train(df, drop_weight=True):
     '''
     Only use day > 85 data
     Default: drop weight 0 trades
