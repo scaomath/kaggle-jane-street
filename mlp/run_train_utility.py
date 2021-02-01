@@ -20,12 +20,13 @@ from mlp import *
 Training script using a utility regularizer
 '''
 
-
+DEBUG = False
 BATCH_SIZE = 4096
-EPOCHS = 200
-LEARNING_RATE = 1e-4
+FINETUNE_BATCH_SIZE = 102400
+EPOCHS = 50
+LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-5
-EARLYSTOP_NUM = 5
+EARLYSTOP_NUM = 10
 NFOLDS = 1
 SCALING = 10
 THRESHOLD = 0.5
@@ -41,6 +42,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 with timer("Loading train parquet"):
     train_parquet = os.path.join(DATA_DIR, 'train.parquet')
     train = pd.read_parquet(train_parquet)
+train = train.loc[train.date > 85].reset_index(drop=True)
 #%%
 # vanilla actions based on resp
 train['action_0'] = (train['resp'] > 0).astype('int')
@@ -72,37 +74,76 @@ train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_wo
 
 valid_set = ExtendedMarketDataset(valid, features=feat_cols, targets=target_cols, resp=['resp'])
 valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
-#%% sanity check
-item = next(iter(train_loader))
-print(item)
+
+# sanity check
+# item = next(iter(train_loader))
+# print(item)
 # %%
 model = ResidualMLP(output_size=len(target_cols))
 model.to(device)
 summary(model, input_size=(len(feat_cols), ))
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-optimizer = Lookahead(optimizer=optimizer, k=10, alpha=0.5)
+# optimizer = Lookahead(optimizer=optimizer, k=10, alpha=0.5)
 scheduler = None
 # scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer=optimizer, pct_start=0.1, div_factor=1e3,
 #                                                 max_lr=1e-2, epochs=EPOCHS, 
 #                                                 steps_per_epoch=len(train_loader))
-loss_fn = SmoothBCEwLogits(smoothing=0.01)
-regularizer = UtilityLoss(alpha=1e-4, scaling=10)
+loss_fn = SmoothBCEwLogits(smoothing=0.005)
+
 es = EarlyStopping(patience=EARLYSTOP_NUM, mode="max")
+
+regularizer = UtilityLoss(alpha=1e-3, scaling=20)
+
+finetune_loader = DataLoader(train_set, batch_size=len(train)//5, shuffle=True, num_workers=8)
 # %%
-train_loss = train_epoch(model, optimizer, scheduler, loss_fn, train_loader, device)
+
+for epoch in range(EPOCHS):
+
+    start_time = time()
+    train_loss = train_epoch(model, optimizer, scheduler, loss_fn, train_loader, device)
+        
+    train_loss = train_epoch_utility(model, optimizer, scheduler, 
+                                         loss_fn, regularizer, finetune_loader, device)
+
+    valid_pred = valid_epoch(model, valid_loader, device)
+    valid_auc = roc_auc_score(valid[target_cols].values.astype(float).reshape(-1), valid_pred)
+    valid_logloss = log_loss(valid[target_cols].values.astype(float).reshape(-1), valid_pred)
+    valid_pred = valid_pred.reshape(-1, len(target_cols))
+    # valid_pred = f(valid_pred[...,:len(target_cols)], axis=-1) # only do first 5
+    valid_pred = f(valid_pred, axis=-1) # all
+    valid_pred = np.where(valid_pred >= THRESHOLD, 1, 0).astype(int)
+    valid_score = utility_score_bincount(date=valid.date.values, 
+                                        weight=valid.weight.values,
+                                        resp=valid.resp.values, 
+                                        action=valid_pred)
+    model_file = MODEL_DIR+f"/resmlp_seed_{SEED}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
+    es(valid_auc, model, model_path=model_file, epoch_utility_score=valid_score)
+
+    print(f"\nEPOCH:{epoch:2d} tr_loss:{train_loss:.2f}  "
+                f"val_utility:{valid_score:.2f} valid_auc:{valid_auc:.4f}  "
+                f"epoch time: {time() - start_time:.1f}sec  "
+                f"early stop counter: {es.counter}\n")
+    
+    if es.early_stop:
+        print("\nEarly stopping")
+        break
+
+#%%
+
+
 # %%
-valid_pred = valid_epoch(model, valid_loader, device)
-valid_auc = roc_auc_score(valid[target_cols].values.astype(float).reshape(-1), valid_pred)
-valid_logloss = log_loss(valid[target_cols].values.astype(float).reshape(-1), valid_pred)
-valid_pred = valid_pred.reshape(-1, len(target_cols))
-# valid_pred = f(valid_pred[...,:len(target_cols)], axis=-1) # only do first 5
-valid_pred = f(valid_pred, axis=-1) # all
-valid_pred = np.where(valid_pred >= THRESHOLD, 1, 0).astype(int)
-valid_score = utility_score_bincount(date=valid.date.values, 
-                                    weight=valid.weight.values,
-                                    resp=valid.resp.values, 
-                                    action=valid_pred)
-# %%
-train_loss = train_epoch_utility(model, optimizer, scheduler, loss_fn, regularizer, train_loader, device)
+if DEBUG:
+    regularizer = UtilityLoss(alpha=1e-4, scaling=10)
+    data = next(iter(train_loader))
+    optimizer.zero_grad()
+    features = data['features'].to(device)
+    label = data['label'].to(device)
+    weight = data['weight'].view(-1).to(device)
+    resp = data['resp'].view(-1).to(device)
+    date = data['date'].view(-1).to(device)
+    outputs = model(features)
+    loss = loss_fn(outputs, label)
+    loss += regularizer(outputs[...,0], resp, weight=weight, date=date)
+    loss.backward()
 # %%

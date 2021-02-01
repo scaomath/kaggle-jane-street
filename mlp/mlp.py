@@ -21,7 +21,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn.modules.loss import _WeightedLoss
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
-from tqdm import tqdm
+from tqdm.auto import tqdm, trange
 
 CURRENT = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.dirname(CURRENT)
@@ -211,10 +211,11 @@ class SmoothBCEwLogits(_WeightedLoss):
 class UtilityLoss(nn.Module):
     def __init__(self, weight=None, alpha=None, scaling=None, reduction='mean'):
         super(UtilityLoss, self).__init__()
-        self.alpha = alpha # the final scaling
+        self.alpha = alpha # the strength of this regularization
         self.reduction = reduction
         self.scaling = scaling
         self.weight = weight
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def forward(self, inputs, targets, weight=None, date=None):
         '''
@@ -224,15 +225,30 @@ class UtilityLoss(nn.Module):
         '''
     
         inputs = F.sigmoid(self.scaling*inputs)       
-        
+
+
         #flatten label and prediction tensors
         inputs = inputs.view(-1)
         targets = targets.view(-1)
+        weight = weight.view(-1)
+        date = date.view(-1)
+
+        dates = date.unique().detach().cpu()
+        ndays = len(dates)
+
+        Pi = torch.zeros((ndays, 1), dtype=torch.float32)
+        for i, day in enumerate(dates):
+            mask = (date == day)
+            Pi[i] = (weight[mask]*targets[mask]*inputs[mask]).sum()
         
         # a single day
-        Pi = torch.bincount(date, weight * targets * inputs)
-        loss = (Pi.sum()).square()/(Pi.square().sum())
-        return -self.alpha*loss
+        # DEBUG notes: bincount is not differentiable for autograd
+        # Pi = torch.bincount(date, weight * targets * inputs)
+        # loss = Pi.sum()*(Pi.sum().clamp(min=0))/(Pi.square().sum())
+        # loss = (Pi.sum()).square()/(Pi.square().sum())
+        sumPi = Pi.sum()
+        loss = sumPi*(sumPi.clamp(min=0))/ndays
+        return (-self.alpha*loss).to(self.device)
 
 class EarlyStopping:
     def __init__(self, patience=7, mode="max", delta=0.):
@@ -391,23 +407,31 @@ def train_epoch(model, optimizer, scheduler, loss_fn, dataloader, device):
 def train_epoch_utility(model, optimizer, scheduler, loss_fn, regularizer, dataloader, device):
     model.train()
     final_loss = 0
+    util_loss = 0
 
-    for data in dataloader:
-        optimizer.zero_grad()
-        features = data['features'].to(device)
-        label = data['label'].to(device)
-        weight = data['weight'].to(device)
-        resp = data['resp'].to(device)
-        date = data['date'].to(device)
-        outputs = model(features)
-        loss = loss_fn(outputs, label)
-        loss += regularizer(outputs, resp, weight=weight, date=date)
-        loss.backward()
-        optimizer.step()
-        if scheduler:
-            scheduler.step()
+    len_data = len(dataloader)
+    with tqdm(total=len_data) as pbar:
+        for i, data in enumerate(dataloader):
+            optimizer.zero_grad()
+            features = data['features'].to(device)
+            label = data['label'].to(device)
+            weight = data['weight'].to(device)
+            resp = data['resp'].view(-1).to(device)
+            date = data['date'].view(-1).to(device)
+            outputs = model(features)
+            loss1 = loss_fn(outputs, label)
+            loss2 = regularizer(outputs[...,0], resp, weight=weight, date=date)
+            loss = loss1 + loss2
+            loss.backward()
+            optimizer.step()
+            if scheduler:
+                scheduler.step()
 
-        final_loss += loss.item()
+            final_loss += loss1.item()
+            util_loss += -loss2.item()
+
+            pbar.set_description(f"Avg loss: {final_loss/(i+1):.3f}  regularizer val: {util_loss/(i+1):.4f}")
+            pbar.update()
 
     final_loss /= len(dataloader)
 
