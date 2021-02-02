@@ -88,7 +88,7 @@ for _fold in range(N_FOLDS):
     torch.cuda.empty_cache()
     model = ResidualMLP()
     model.to(device)
-    model_weights = os.path.join(MODEL_DIR, f"model_{_fold}.pth")
+    model_weights = os.path.join(MODEL_DIR, f"resmlp_{_fold}.pth")
     try:
         model.load_state_dict(torch.load(model_weights))
     except:

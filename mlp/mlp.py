@@ -452,6 +452,19 @@ def valid_epoch(model, dataloader, device):
     preds = np.concatenate(preds).reshape(-1)
 
     return preds
+
+def get_valid_score(preds, valid_df, f=median_avg, threshold=0.5,target_cols=target_cols):
+    valid_auc = roc_auc_score(valid_df[target_cols].values.astype(float).reshape(-1), preds)
+    valid_logloss = log_loss(valid_df[target_cols].values.astype(float).reshape(-1), preds)
+    valid_pred = preds.reshape(-1, len(target_cols))
+    # valid_pred = f(valid_pred[...,:len(target_cols)], axis=-1) # only do first 5
+    valid_pred = f(valid_pred, axis=-1) # all
+    valid_pred = np.where(valid_pred >= threshold, 1, 0).astype(int)
+    valid_score = utility_score_bincount(date=valid_df.date.values, 
+                                        weight=valid_df.weight.values,
+                                        resp=valid_df.resp.values, 
+                                        action=valid_pred)
+    return valid_auc, valid_score
 #%%
 if __name__ == '__main__':
 
