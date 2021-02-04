@@ -70,10 +70,10 @@ valid['cross_1_2'] = valid['feature_1'] / (valid['feature_2'] + 1e-5)
 
 feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
 # %%
-train_set = ExtendedMarketDataset(train, features=feat_cols, targets=target_cols, resp=['resp'])
+train_set = ExtendedMarketDataset(train, features=feat_cols, targets=target_cols, resp=resp_cols)
 train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
 
-valid_set = ExtendedMarketDataset(valid, features=feat_cols, targets=target_cols, resp=['resp'])
+valid_set = ExtendedMarketDataset(valid, features=feat_cols, targets=target_cols, resp=resp_cols)
 valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
 
 # sanity check
@@ -94,11 +94,11 @@ loss_fn = SmoothBCEwLogits(smoothing=0.005)
 
 es = EarlyStopping(patience=EARLYSTOP_NUM, mode="max")
 #%%
-regularizer = UtilityLoss(alpha=1e-4, scaling=12)
+# regularizer = UtilityLoss(alpha=1e-4, scaling=12)
 
-finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
-finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
-# %%
+# finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
+# finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
+
 
 # for epoch in range(EPOCHS):
 
@@ -133,37 +133,45 @@ if DEBUG:
     features = data['features'].to(device)
     label = data['label'].to(device)
     weight = data['weight'].view(-1).to(device)
-    resp = data['resp'].view(-1).to(device)
+    resp = data['resp'].to(device)
     date = data['date'].view(-1).to(device)
     model.eval()
     outputs = model(features)
     loss = loss_fn(outputs, label)
-    # loss += regularizer(outputs[...,0], resp, weight=weight, date=date)
+    # loss += regularizer(outputs, resp, weight=weight, date=date)
     # loss.backward()
 # %%
 get_seed(1127802)
-_fold = 3
+_fold = 4
 model_weights = os.path.join(MODEL_DIR, f"resmlp_{_fold}.pth")
 try:
     model.load_state_dict(torch.load(model_weights))
 except:
     model.load_state_dict(torch.load(model_weights, map_location=torch.device('cpu')))
 model.eval()
-# %%
-regularizer = UtilityLoss(alpha=1e-4, scaling=10)
-finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
-finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
+valid_pred = valid_epoch(model, valid_loader, device)
+valid_auc, valid_score = get_valid_score(valid_pred, valid, 
+                                        f=median_avg, threshold=0.5, target_cols=target_cols)
 
-FINETUNE_EPOCHS = 1
+print(f"val_utility:{valid_score:.2f}  valid_auc:{valid_auc:.4f}")
+# %%
+FINETUNE_BATCH_SIZE = 51200
+regularizer = UtilityLoss(alpha=1, scaling=12)
+finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
+finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-2)
+
+FINETUNE_EPOCHS = 5
 for epoch in range(FINETUNE_EPOCHS):
     tqdm.write(f"\nFine tuning epoch {epoch+1}")
-    train_loss = train_epoch_utility(model, finetune_optimizer, scheduler, 
-                                         loss_fn, regularizer, finetune_loader, device)
+    _ = train_epoch_utility(model, finetune_optimizer, scheduler, 
+                            regularizer, finetune_loader, device)
+    train_loss = train_epoch(model, finetune_optimizer, scheduler, 
+                             loss_fn, finetune_loader, device)                            
     valid_pred = valid_epoch(model, valid_loader, device)
     valid_auc, valid_score = get_valid_score(valid_pred, valid, 
                                             f=median_avg, threshold=0.5, target_cols=target_cols)
 
-    tqdm.write(f"val_utility:{valid_score:.2f}  valid_auc:{valid_auc:.4f}")
+    tqdm.write(f"\nval_utility:{valid_score:.2f}  valid_auc:{valid_auc:.4f}")
 # %%
 torch.save(model.state_dict(), MODEL_DIR+f"/resmlp_finetune_fold_{_fold}.pth")
 # %%

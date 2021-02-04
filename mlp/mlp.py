@@ -225,7 +225,10 @@ class UtilityLoss(nn.Module):
         '''
     
         inputs = F.sigmoid(self.scaling*inputs)       
-
+        n_targets = inputs.size(-1)
+        if n_targets > 1:
+            weight = weight.repeat((n_targets,1))
+            date = date.repeat((n_targets,1))
 
         #flatten label and prediction tensors
         inputs = inputs.view(-1)
@@ -246,8 +249,10 @@ class UtilityLoss(nn.Module):
         # Pi = torch.bincount(date, weight * targets * inputs)
         # loss = Pi.sum()*(Pi.sum().clamp(min=0))/(Pi.square().sum())
         # loss = (Pi.sum()).square()/(Pi.square().sum())
+        
         sumPi = Pi.sum()
-        loss = sumPi*(sumPi.clamp(min=0))/ndays
+        # loss = sumPi*(sumPi.clamp(min=0))/ndays
+        loss = sumPi*(sumPi.clamp(min=0))/(Pi.square().sum())/ndays
         return (-self.alpha*loss).to(self.device)
 
 class EarlyStopping:
@@ -404,9 +409,9 @@ def train_epoch(model, optimizer, scheduler, loss_fn, dataloader, device):
 
     return final_loss
 
-def train_epoch_utility(model, optimizer, scheduler, loss_fn, regularizer, dataloader, device):
+def train_epoch_utility(model, optimizer, scheduler, regularizer, dataloader, device):
     model.train()
-    final_loss = 0
+    # final_loss = 0
     util_loss = 0
 
     len_data = len(dataloader)
@@ -419,23 +424,20 @@ def train_epoch_utility(model, optimizer, scheduler, loss_fn, regularizer, datal
             resp = data['resp'].view(-1).to(device)
             date = data['date'].view(-1).to(device)
             outputs = model(features)
-            loss1 = loss_fn(outputs, label)
-            loss2 = regularizer(outputs[...,0], resp, weight=weight, date=date)
-            loss = loss1 + loss2
+            loss = regularizer(outputs[...,0], resp, weight=weight, date=date)
             loss.backward()
             optimizer.step()
             if scheduler:
                 scheduler.step()
+            # with torch.no_grad():
+            #     _loss = loss_fn(outputs, label)
+            # final_loss += _loss.item()
+            util_loss += -loss.item()
 
-            final_loss += loss1.item()
-            util_loss += -loss2.item()
-
-            pbar.set_description(f"Avg loss: {final_loss/(i+1):.3f}  regularizer val: {util_loss/(i+1):.4f}")
+            pbar.set_description(f"Utility regularizer val: {util_loss/(i+1):.4f}")
             pbar.update()
 
-    final_loss /= len(dataloader)
-
-    return final_loss
+    return util_loss
 
 def valid_epoch(model, dataloader, device):
     model.eval()
