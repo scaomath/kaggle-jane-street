@@ -93,37 +93,6 @@ scheduler = None
 loss_fn = SmoothBCEwLogits(smoothing=0.005)
 
 es = EarlyStopping(patience=EARLYSTOP_NUM, mode="max")
-#%%
-# regularizer = UtilityLoss(alpha=1e-4, scaling=12)
-
-# finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
-# finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
-
-
-# for epoch in range(EPOCHS):
-
-#     start_time = time()
-#     train_loss = train_epoch(model, optimizer, scheduler, loss_fn, train_loader, device)
-        
-#     train_loss = train_epoch_utility(model, finetune_optimizer, scheduler, 
-#                                          loss_fn, regularizer, finetune_loader, device)
-
-#     valid_pred = valid_epoch(model, valid_loader, device)
-#     valid_auc, valid_score = get_valid_score(valid_pred, valid, 
-#                                         f=median_avg, threshold=0.5, target_cols=target_cols)
-#     model_file = MODEL_DIR+f"/resmlp_seed_{SEED}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
-#     es(valid_auc, model, model_path=model_file, epoch_utility_score=valid_score)
-
-#     print(f"\nEPOCH:{epoch:2d} tr_loss:{train_loss:.2f}  "
-#                 f"val_utility:{valid_score:.2f} valid_auc:{valid_auc:.4f}  "
-#                 f"epoch time: {time() - start_time:.1f}sec  "
-#                 f"early stop counter: {es.counter}\n")
-    
-#     if es.early_stop:
-#         print("\nEarly stopping")
-#         break
-
-
 
 # %%
 if DEBUG:
@@ -155,18 +124,23 @@ valid_auc, valid_score = get_valid_score(valid_pred, valid,
 
 print(f"val_utility:{valid_score:.2f}  valid_auc:{valid_auc:.4f}")
 # %%
-FINETUNE_BATCH_SIZE = 51200
+'''
+fine-tuning the trained model utility score
+current best setting: bathsize = 100k
+to-do: using the least square loss to model w_{ij} res[ij]
+'''
+FINETUNE_BATCH_SIZE = 102_400
 regularizer = UtilityLoss(alpha=1, scaling=12)
 finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
 finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-2)
 
-FINETUNE_EPOCHS = 5
+FINETUNE_EPOCHS = 1
 for epoch in range(FINETUNE_EPOCHS):
     tqdm.write(f"\nFine tuning epoch {epoch+1}")
     _ = train_epoch_utility(model, finetune_optimizer, scheduler, 
                             regularizer, finetune_loader, device)
-    train_loss = train_epoch(model, finetune_optimizer, scheduler, 
-                             loss_fn, finetune_loader, device)                            
+    # train_loss = train_epoch(model, finetune_optimizer, scheduler, 
+    #                          loss_fn, finetune_loader, device)                            
     valid_pred = valid_epoch(model, valid_loader, device)
     valid_auc, valid_score = get_valid_score(valid_pred, valid, 
                                             f=median_avg, threshold=0.5, target_cols=target_cols)
@@ -175,3 +149,32 @@ for epoch in range(FINETUNE_EPOCHS):
 # %%
 torch.save(model.state_dict(), MODEL_DIR+f"/resmlp_finetune_fold_{_fold}.pth")
 # %%
+#%%
+# regularizer = UtilityLoss(alpha=1e-4, scaling=12)
+
+# finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
+# finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
+
+
+# for epoch in range(EPOCHS):
+
+#     start_time = time()
+#     train_loss = train_epoch(model, optimizer, scheduler, loss_fn, train_loader, device)
+        
+#     train_loss = train_epoch_utility(model, finetune_optimizer, scheduler, 
+#                                          loss_fn, regularizer, finetune_loader, device)
+
+#     valid_pred = valid_epoch(model, valid_loader, device)
+#     valid_auc, valid_score = get_valid_score(valid_pred, valid, 
+#                                         f=median_avg, threshold=0.5, target_cols=target_cols)
+#     model_file = MODEL_DIR+f"/resmlp_seed_{SEED}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
+#     es(valid_auc, model, model_path=model_file, epoch_utility_score=valid_score)
+
+#     print(f"\nEPOCH:{epoch:2d} tr_loss:{train_loss:.2f}  "
+#                 f"val_utility:{valid_score:.2f} valid_auc:{valid_auc:.4f}  "
+#                 f"epoch time: {time() - start_time:.1f}sec  "
+#                 f"early stop counter: {es.counter}\n")
+    
+#     if es.early_stop:
+#         print("\nEarly stopping")
+#         break

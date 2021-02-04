@@ -255,6 +255,39 @@ class UtilityLoss(nn.Module):
         loss = sumPi*(sumPi.clamp(min=0))/(Pi.square().sum())/ndays
         return (-self.alpha*loss).to(self.device)
 
+#Designed to do all features at the same time, but Kaggle kernels are memory limited.
+class NeutralizeTransform:
+    def __init__(self,proportion=1.0):
+        self.proportion = proportion
+    
+    def fit(self,X,y):
+        self.lms = []
+        self.mean_exposure = np.mean(y,axis=0)
+        self.y_shape = y.shape[-1]
+        for x in X.T:
+            scores = x.reshape((-1,1))
+            exposures = y
+            exposures = np.hstack((exposures, np.array([np.mean(scores)] * len(exposures)).reshape(-1, 1)))
+            
+            transform = np.linalg.lstsq(exposures, scores, rcond=None)[0]
+            self.lms.append(transform)
+            
+    def transform(self,X,y=None):
+        out = []
+        for i,transform in enumerate(self.lms):
+            x = X[:,i]
+            scores = x.reshape((-1,1))
+            exposures = np.repeat(self.mean_exposure,len(x),axis=0).reshape((-1,self.y_shape))
+            exposures = np.concatenate([exposures,np.array([np.mean(scores)] * len(exposures)).reshape((-1,1))],axis=1)
+            correction = self.proportion * exposures.dot(transform)
+            out.append(x - correction.ravel())
+            
+        return np.asarray(out).T
+    
+    def fit_transform(self,X,y):
+        self.fit(X,y)
+        return self.transform(X,y)
+
 class EarlyStopping:
     def __init__(self, patience=7, mode="max", delta=0.):
         self.patience = patience
@@ -424,7 +457,8 @@ def train_epoch_utility(model, optimizer, scheduler, regularizer, dataloader, de
             resp = data['resp'].view(-1).to(device)
             date = data['date'].view(-1).to(device)
             outputs = model(features)
-            loss = regularizer(outputs[...,0], resp, weight=weight, date=date)
+            # loss = regularizer(outputs[...,0], resp, weight=weight, date=date)
+            loss = regularizer(outputs, resp, weight=weight, date=date)
             loss.backward()
             optimizer.step()
             if scheduler:
