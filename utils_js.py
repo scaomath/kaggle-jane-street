@@ -137,7 +137,7 @@ class PurgedGroupTimeSeriesSplit(_BaseKFold):
 
 
 
-def preprocess_train(df, drop_weight=True):
+def preprocess_base(df, drop_weight=True):
     '''
     Only use day > 85 data
     Default: drop weight 0 trades
@@ -157,6 +157,32 @@ def preprocess_train(df, drop_weight=True):
     df = df[columns]
     return df
 
+## preprocess for torch model
+def preprocess_pt(train_file, day_split=450, drop_weight=False):
+    try:
+        train = pd.read_parquet(train_file)
+    except:
+        train = pd.read_feather(train_file)
+    train = train.loc[train.date > 85].reset_index(drop=True)
+    
+    if drop_weight:
+        train = train[train['weight'] > 0].reset_index(drop = True)  
+    # vanilla actions based on resp
+    train['action_0'] = (train['resp'] > 0).astype('int')
+    for c in range(1,5):
+        train['action_'+str(c)] = (train['resp_'+str(c)] > 0).astype('int')
+
+    train.fillna(train.mean(),inplace=True)
+
+    valid = train.loc[train.date >= day_split].reset_index(drop=True)
+    train = train.loc[train.date < day_split].reset_index(drop=True)
+
+    train['cross_41_42_43'] = train['feature_41'] + train['feature_42'] + train['feature_43']
+    train['cross_1_2'] = train['feature_1'] / (train['feature_2'] + 1e-5)
+    valid['cross_41_42_43'] = valid['feature_41'] + valid['feature_42'] + valid['feature_43']
+    valid['cross_1_2'] = valid['feature_1'] / (valid['feature_2'] + 1e-5)
+
+    return train, valid
 
 '''
 Simulate the inference env of Kaggle

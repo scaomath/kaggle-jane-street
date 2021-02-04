@@ -44,6 +44,7 @@ f_mean = np.load(os.path.join(DATA_DIR,'f_mean.npy'))
 all_feat_cols = [col for col in feat_cols]
 all_feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
 
+
 ##### Model&Data fnc
 class ResidualMLP(nn.Module):
     def __init__(self, hidden_size=256, 
@@ -208,13 +209,58 @@ class SmoothBCEwLogits(_WeightedLoss):
         return loss
 
 
-class UtilityLoss(nn.Module):
-    def __init__(self, weight=None, alpha=None, scaling=None, reduction='mean'):
-        super(UtilityLoss, self).__init__()
+class RespMSELoss(nn.Module):
+    def __init__(self, weight=None, alpha=None, reduction='mean', scaling=None, resp_index=None):
+        super(RespMSELoss, self).__init__()
         self.alpha = alpha # the strength of this regularization
+        self.scaling = scaling
         self.reduction = reduction
+        self.weight = weight
+        self.resp_index = resp_index
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    def forward(self, inputs, targets, weight=None, date=None):
+        '''
+        inputs: prediction of the model (without sigmoid, processed with a scaling)
+        targets: resp columns
+        simple MSE for resp
+        date is just for implementation uniformity
+        '''
+        if self.resp_index is not None and len(self.resp_index) < 5:
+            inputs = inputs[..., self.resp_index]
+            targets = targets[..., self.resp_index]
+        
+        if self.scaling is not None:
+            inputs *= self.scaling
+
+        n_targets = inputs.size(-1)
+        #flatten label and prediction tensors
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+
+        loss = (inputs - targets).square()
+
+        if weight is not None:
+            if n_targets > 1:
+                weight = weight.repeat((n_targets,1))
+            weight = weight.view(-1)
+            loss *= weight
+
+        if self.reduction == 'sum':
+            loss = loss.sum()
+        elif  self.reduction == 'mean':
+            loss = loss.mean()
+
+        return loss.to(self.device)
+
+class UtilityLoss(nn.Module):
+    def __init__(self, weight=None, alpha=None, scaling=None, normalize='mean', resp_index=None):
+        super(UtilityLoss, self).__init__()
+        self.alpha = alpha if normalize == 'mean' else alpha*1e-3 # the strength of this regularization
+        self.normalize = normalize
         self.scaling = scaling
         self.weight = weight
+        self.resp_index = resp_index
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def forward(self, inputs, targets, weight=None, date=None):
@@ -223,7 +269,8 @@ class UtilityLoss(nn.Module):
         targets: resp columns
         negative of the utility for minimization
         '''
-    
+        if self.resp_index is not None and len(self.resp_index) < 5:
+            inputs = inputs[..., self.resp_index]
         inputs = F.sigmoid(self.scaling*inputs)       
         n_targets = inputs.size(-1)
         if n_targets > 1:
@@ -251,9 +298,12 @@ class UtilityLoss(nn.Module):
         # loss = (Pi.sum()).square()/(Pi.square().sum())
         
         sumPi = Pi.sum()
-        # loss = sumPi*(sumPi.clamp(min=0))/ndays
-        loss = sumPi*(sumPi.clamp(min=0))/(Pi.square().sum())/ndays
-        return (-self.alpha*loss).to(self.device)
+        if self.normalize == 'mean':
+            loss = -self.alpha*sumPi*(sumPi.clamp(min=0))/(Pi.square().sum())/ndays
+        else:
+            loss = -self.alpha*sumPi*(sumPi.clamp(min=0))/ndays
+        
+        return loss.to(self.device)
 
 #Designed to do all features at the same time, but Kaggle kernels are memory limited.
 class NeutralizeTransform:
@@ -289,11 +339,12 @@ class NeutralizeTransform:
         return self.transform(X,y)
 
 class EarlyStopping:
-    def __init__(self, patience=7, mode="max", delta=0.):
+    def __init__(self, patience=7, mode="max", delta=0.0, monitor='utility'):
         self.patience = patience
         self.counter = 0
         self.util_counter = 0
         self.mode = mode
+        self.monitor = monitor
         self.best_score = None
         self.best_utility_score = None
         self.early_stop = False
@@ -302,7 +353,7 @@ class EarlyStopping:
             self.val_score = np.Inf
         else:
             self.val_score = -np.Inf
-        self.model_saved = False
+        self.message = None
 
     def __call__(self, epoch_score, model, model_path, epoch_utility_score):
 
@@ -312,35 +363,35 @@ class EarlyStopping:
             score = np.copy(epoch_score)
         util_score = epoch_utility_score
 
-        if self.best_score is None:
-            self.best_score = score
-            self.save_checkpoint(epoch_score, model, model_path)
-        elif score < self.best_score: #  + self.delta
-            self.counter += 1
-            _ = f'EarlyStopping counter: {self.counter} out of {self.patience}'
-            if self.counter >= self.patience:
-                self.early_stop = True
-            self.model_saved = False
+        if self.monitor == 'utility':
+            if self.best_utility_score is None:
+                self.best_utility_score = util_score
+            elif util_score < self.best_utility_score:
+                self.util_counter += 1
+                _ = f'EarlyStopping counter: {self.util_counter} out of {self.patience}'
+                if self.util_counter >= self.patience: # a harder offset
+                    self.early_stop = True
+            else:
+                self.message = f'Utility score :({self.best_utility_score} --> {util_score}); model saved.'
+                self.best_utility_score = util_score
+                self.save_checkpoint(epoch_score, model, model_path)
+                self.util_counter = 0
         else:
-            self.best_score = score
-            self.save_checkpoint(epoch_score, model, model_path)
-            self.counter = 0
-            self.model_saved = True
+            if self.best_score is None:
+                self.best_score = score
+                self.save_checkpoint(epoch_score, model, model_path)
+            elif score < self.best_score: #  + self.delta
+                self.counter += 1
+                _ = f'EarlyStopping counter: {self.counter} out of {self.patience}'
+                if self.counter >= self.patience:
+                    self.early_stop = True
+            else:
+                self.message = f'Valid score :({self.best_score} --> {score}); model saved.'
+                self.best_score = score
+                self.save_checkpoint(epoch_score, model, model_path)
+                self.counter = 0
 
-        if self.best_utility_score is None:
-            self.best_utility_score = util_score
-        elif util_score < self.best_utility_score:
-            self.util_counter += 1
-            _ = f'EarlyStopping counter: {self.util_counter} out of {self.patience}'
-            if self.util_counter >= self.patience + 5: # a harder offset
-                self.early_stop = True
-            self.model_saved = False
-        else:
-            _ = f'Utility score :({self.best_utility_score} --> {util_score}); model saved.'
-            self.best_utility_score = util_score
-            self.save_checkpoint(epoch_score, model, model_path)
-            self.util_counter = 0
-            self.model_saved = True
+        
 
     def save_checkpoint(self, epoch_score, model, model_path):
         if epoch_score not in [-np.inf, np.inf, -np.nan, np.nan]:
@@ -424,30 +475,35 @@ class Lookahead(Optimizer):
 def train_epoch(model, optimizer, scheduler, loss_fn, dataloader, device):
     model.train()
     final_loss = 0
+    len_data = len(dataloader)
 
-    for data in dataloader:
-        optimizer.zero_grad()
-        features = data['features'].to(device)
-        label = data['label'].to(device)
-        outputs = model(features)
-        loss = loss_fn(outputs, label)
-        loss.backward()
-        optimizer.step()
-        if scheduler:
-            scheduler.step()
+    with tqdm(total=len_data) as pbar:
+        for data in dataloader:
+            optimizer.zero_grad()
+            features = data['features'].to(device)
+            label = data['label'].to(device)
+            outputs = model(features)
+            loss = loss_fn(outputs, label)
+            loss.backward()
+            optimizer.step()
+            if scheduler:
+                scheduler.step()
 
-        final_loss += loss.item()
+            final_loss += loss.item()
+            pbar.update()
 
     final_loss /= len(dataloader)
 
     return final_loss
 
-def train_epoch_utility(model, optimizer, scheduler, regularizer, dataloader, device):
+def train_epoch_utility(model, optimizer, scheduler, regularizer, dataloader, device, loss_fn=None):
     model.train()
     # final_loss = 0
     util_loss = 0
-
+    final_loss = 0
     len_data = len(dataloader)
+    _loss = None
+
     with tqdm(total=len_data) as pbar:
         for i, data in enumerate(dataloader):
             optimizer.zero_grad()
@@ -457,21 +513,76 @@ def train_epoch_utility(model, optimizer, scheduler, regularizer, dataloader, de
             resp = data['resp'].view(-1).to(device)
             date = data['date'].view(-1).to(device)
             outputs = model(features)
-            # loss = regularizer(outputs[...,0], resp, weight=weight, date=date)
             loss = regularizer(outputs, resp, weight=weight, date=date)
+            util_loss += -loss.item()
+            if loss_fn is not None:
+                _loss = loss_fn(outputs, label)
+                loss += _loss
             loss.backward()
             optimizer.step()
             if scheduler:
                 scheduler.step()
             # with torch.no_grad():
             #     _loss = loss_fn(outputs, label)
-            # final_loss += _loss.item()
-            util_loss += -loss.item()
-
-            pbar.set_description(f"Utility regularizer val: {util_loss/(i+1):.4f}")
+            
+            if _loss is not None:
+                final_loss += _loss.item()
+                pbar.set_description(f"Train loss: {final_loss/(i+1):.8f} \t Train utility: {util_loss/(i+1):.4e}")
+            else:
+                pbar.set_description(f"Utility regularizer val: {util_loss/(i+1):.4e}")
             pbar.update()
 
     return util_loss
+
+def train_epoch_finetune(model, optimizer, scheduler, regularizer, dataloader, device, 
+                         loss_fn=None, weighted=True):
+    model.train()
+    utils_loss = 0
+    train_loss = 0
+    len_data = len(dataloader)
+    _loss = None
+
+    with tqdm(total=len_data) as pbar:
+        for i, data in enumerate(dataloader):
+            optimizer.zero_grad()
+            features = data['features'].to(device)
+            label = data['label'].to(device)
+            weight = data['weight'].to(device)
+            resp = data['resp'].view(-1).to(device)
+            date = data['date'].view(-1).to(device)
+            outputs = model(features)
+            if weighted:
+                loss = regularizer(outputs, resp, weight=weight, date=date)
+            else:
+                loss = regularizer(outputs, resp)
+
+            if loss.item() < 0:
+                utils_loss += -loss.item()
+            else:
+                utils_loss += loss.item()
+
+            if loss_fn is not None:
+                _loss = loss_fn(outputs, label)
+                loss += _loss
+
+            loss.backward()
+            optimizer.step()
+            if scheduler:
+                scheduler.step()
+            # with torch.no_grad():
+            #     _loss = loss_fn(outputs, label)
+            
+            if _loss is not None:
+                train_loss += _loss.item()
+                desc = f"Train loss: {train_loss/(i+1):.8f} \t" 
+                desc += f"Fine-tuning {regularizer.__class__.__name__} loss: {utils_loss/(i+1):.4e}"
+                pbar.set_description(desc)
+            else:
+                desc = f"Fine-tuning {regularizer.__class__.__name__} loss: {utils_loss/(i+1):.4e}"
+                pbar.set_description(desc)
+            pbar.update()
+
+    return utils_loss
 
 def valid_epoch(model, dataloader, device):
     model.eval()
