@@ -44,7 +44,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #%%
 with timer("Preprocessing train"):
     train_parquet = os.path.join(DATA_DIR, 'train.parquet')
-    train, valid = preprocess_pt(train_parquet,drop_weight=True)
+    train, valid = preprocess_pt(train_parquet, drop_weight=True)
 
 print(f'action based on resp mean:   ', train['action_0'].astype(int).mean())
 for c in range(1,5):
@@ -93,7 +93,8 @@ if LOAD_PRETRAIN:
     print(f"valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
 # %%
 '''
-fine-tuning the trained model based on resp
+fine-tuning the trained model based on resp or utils
+current fine-tuning train set is all train
 max batch_size:
 3 resps: 102400
 
@@ -101,20 +102,22 @@ current best setting:
 '''
 resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 
-# resp_cols = ['resp', 'resp_1', 'resp_2']
-# resp_cols = ['resp']
-resp_index = [resp_cols_all.index(r) for r in resp_cols] 
+# util_cols = ['resp', 'resp_1', 'resp_2']
+# util_cols = ['resp']
+util_cols = resp_cols
+resp_index = [resp_cols_all.index(r) for r in util_cols] 
 
 # regularizer = RespMSELoss(alpha=1e-1, scaling=1, resp_index=resp_index)
 regularizer = UtilityLoss(alpha=1e-1, scaling=12, normalize=None, resp_index=resp_index)
 
 all_train = pd.concat([train, valid], axis=0)
 train_set = ExtendedMarketDataset(all_train, features=feat_cols, targets=target_cols, resp=resp_cols)
-
-finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
 train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
 
-finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-2)
+finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
+
+
+finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
 
 early_stop = EarlyStopping(patience=EARLYSTOP_NUM, mode="max")
 # %%
@@ -136,11 +139,12 @@ for epoch in range(EPOCHS):
     model_file = MODEL_DIR+f"/resmlp_seed_{SEED}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
     early_stop(valid_auc, model, model_path=model_file, epoch_utility_score=valid_score)
     
-    tqdm.write(f"Train loss:{train_loss:.4f}")
+    tqdm.write(f"Train loss: {train_loss:.4f}")
     tqdm.write(f"Early stop counter: {early_stop.counter} \t {early_stop.message} ")
-    tqdm.write(f"\nValid utility:{valid_score:.2f} \t Valid AUC:{valid_auc:.4f}")
+    tqdm.write(f"Valid utility: {valid_score:.2f} \t Valid AUC: {valid_auc:.4f}\n")
     if early_stop.early_stop:
         print("\nEarly stopping")
         break
 
 # %%
+torch.save(model.state_dict(), MODEL_DIR+f"/resmlp_finetune_fold_{_fold}.pth")

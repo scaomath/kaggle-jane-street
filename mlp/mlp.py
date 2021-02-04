@@ -369,11 +369,11 @@ class EarlyStopping:
                 self.best_utility_score = util_score
             elif util_score < self.best_utility_score:
                 self.counter += 1
-                _ = f'EarlyStopping counter: {self.util_counter} out of {self.patience}'
+                self.message = f'EarlyStopping counter: {self.counter} out of {self.patience}'
                 if self.counter >= self.patience: # a harder offset
                     self.early_stop = True
             else:
-                self.message = f'Utility score :({self.best_utility_score} --> {util_score}); model saved.'
+                self.message = f'Utility score :({self.best_utility_score} --> {util_score}).'
                 self.best_utility_score = util_score
                 if util_score > self.save_threshold:
                     self.message += " model saved."
@@ -385,7 +385,7 @@ class EarlyStopping:
                 self.save_checkpoint(epoch_score, model, model_path)
             elif score < self.best_score: #  + self.delta
                 self.counter += 1
-                _ = f'EarlyStopping counter: {self.counter} out of {self.patience}'
+                self.message = f'EarlyStopping counter: {self.counter} out of {self.patience}'
                 if self.counter >= self.patience:
                     self.early_stop = True
             else:
