@@ -44,6 +44,7 @@ f_mean = np.load(os.path.join(DATA_DIR,'f_mean.npy'))
 all_feat_cols = [col for col in feat_cols]
 all_feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
 
+val_util_thresh = 5000
 
 ##### Model&Data fnc
 class ResidualMLP(nn.Module):
@@ -339,10 +340,9 @@ class NeutralizeTransform:
         return self.transform(X,y)
 
 class EarlyStopping:
-    def __init__(self, patience=7, mode="max", delta=0.0, monitor='utility'):
+    def __init__(self, patience=7, mode="max", delta=0.0, monitor='utility', save_threshold=5000):
         self.patience = patience
         self.counter = 0
-        self.util_counter = 0
         self.mode = mode
         self.monitor = monitor
         self.best_score = None
@@ -354,6 +354,7 @@ class EarlyStopping:
         else:
             self.val_score = -np.Inf
         self.message = None
+        self.save_threshold = save_threshold
 
     def __call__(self, epoch_score, model, model_path, epoch_utility_score):
 
@@ -367,15 +368,17 @@ class EarlyStopping:
             if self.best_utility_score is None:
                 self.best_utility_score = util_score
             elif util_score < self.best_utility_score:
-                self.util_counter += 1
+                self.counter += 1
                 _ = f'EarlyStopping counter: {self.util_counter} out of {self.patience}'
-                if self.util_counter >= self.patience: # a harder offset
+                if self.counter >= self.patience: # a harder offset
                     self.early_stop = True
             else:
                 self.message = f'Utility score :({self.best_utility_score} --> {util_score}); model saved.'
                 self.best_utility_score = util_score
-                self.save_checkpoint(epoch_score, model, model_path)
-                self.util_counter = 0
+                if util_score > self.save_threshold:
+                    self.message += " model saved."
+                    self.save_checkpoint(epoch_score, model, model_path)
+                self.counter = 0
         else:
             if self.best_score is None:
                 self.best_score = score
@@ -386,9 +389,11 @@ class EarlyStopping:
                 if self.counter >= self.patience:
                     self.early_stop = True
             else:
-                self.message = f'Valid score :({self.best_score} --> {score}); model saved.'
+                self.message = f'Valid score :({self.best_score} --> {score}).'
                 self.best_score = score
-                self.save_checkpoint(epoch_score, model, model_path)
+                if score > self.save_threshold:
+                    self.message += " model saved."
+                    self.save_checkpoint(epoch_score, model, model_path)
                 self.counter = 0
 
         

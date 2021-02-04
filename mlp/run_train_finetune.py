@@ -26,7 +26,7 @@ FINETUNE_BATCH_SIZE = 2048_00
 BATCH_SIZE = 25600
 EPOCHS = 50
 FINETUNE_EPOCHS = 20
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-5
 EARLYSTOP_NUM = 10
 NFOLDS = 1
@@ -65,7 +65,7 @@ train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_wo
 valid_set = ExtendedMarketDataset(valid, features=feat_cols, targets=target_cols, resp=resp_cols)
 valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
 
-model = ResidualMLP(output_size=len(target_cols))
+model = ResidualMLP(hidden_size=512, output_size=len(target_cols))
 model.to(device)
 summary(model, input_size=(len(feat_cols), ))
 
