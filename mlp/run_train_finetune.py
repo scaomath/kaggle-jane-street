@@ -1,19 +1,20 @@
-#%%
-import os, sys
+# %%
+from mlp import *
+from utils import *
+from torchsummary import summary
+import os
+import sys
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-torch.backends.cudnn.deterministic = True # for bincount
+torch.backends.cudnn.deterministic = True  # for bincount
 
-from torchsummary import summary
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.dirname(current_path)
 MODEL_DIR = os.path.join(HOME,  'models')
 DATA_DIR = os.path.join(HOME,  'data')
-sys.path.append(HOME) 
-from utils import *
-from mlp import *
+sys.path.append(HOME)
 # %%
 
 '''
@@ -23,16 +24,16 @@ Training script finetuning using resp colums as regularizer
 DEBUG = False
 LOAD_PRETRAIN = False
 FINETUNE_BATCH_SIZE = 2048_00
-BATCH_SIZE = 25600
-EPOCHS = 50
-FINETUNE_EPOCHS = 20
+BATCH_SIZE = 12800
+EPOCHS = 200
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-5
-EARLYSTOP_NUM = 10
+EARLYSTOP_NUM = 6
 NFOLDS = 1
 SCALING = 10
 THRESHOLD = 0.5
-SEED = 802
+
+SEED = 1127802
 get_seed(SEED)
 
 # f = np.median
@@ -41,14 +42,15 @@ f = median_avg
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # %%
 
-#%%
+# %%
 with timer("Preprocessing train"):
     train_parquet = os.path.join(DATA_DIR, 'train.parquet')
     train, valid = preprocess_pt(train_parquet, drop_weight=True)
 
 print(f'action based on resp mean:   ', train['action_0'].astype(int).mean())
-for c in range(1,5):
-    print(f'action based on resp_{c} mean: ', train['action_'+str(c)].astype(int).mean())
+for c in range(1, 5):
+    print(f'action based on resp_{c} mean: ',
+          train['action_'+str(c)].astype(int).mean())
 
 resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 resp_cols_all = resp_cols
@@ -59,18 +61,24 @@ feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
 
 
 # %%
-train_set = ExtendedMarketDataset(train, features=feat_cols, targets=target_cols, resp=resp_cols)
-train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
+train_set = ExtendedMarketDataset(
+    train, features=feat_cols, targets=target_cols, resp=resp_cols)
+train_loader = DataLoader(
+    train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
 
-valid_set = ExtendedMarketDataset(valid, features=feat_cols, targets=target_cols, resp=resp_cols)
-valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
+valid_set = ExtendedMarketDataset(
+    valid, features=feat_cols, targets=target_cols, resp=resp_cols)
+valid_loader = DataLoader(
+    valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
 
-model = ResidualMLP(hidden_size=512, output_size=len(target_cols))
+model = ResidualMLP(hidden_size=256, output_size=len(target_cols))
 model.to(device)
 summary(model, input_size=(len(feat_cols), ))
 
-optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-scheduler = None
+optimizer = torch.optim.Adam(
+    model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+# scheduler = None
+
 loss_fn = SmoothBCEwLogits(smoothing=0.005)
 
 
@@ -84,11 +92,12 @@ if LOAD_PRETRAIN:
     try:
         model.load_state_dict(torch.load(model_weights))
     except:
-        model.load_state_dict(torch.load(model_weights, map_location=torch.device('cpu')))
+        model.load_state_dict(torch.load(
+            model_weights, map_location=torch.device('cpu')))
     model.eval()
     valid_pred = valid_epoch(model, valid_loader, device)
-    valid_auc, valid_score = get_valid_score(valid_pred, valid, 
-                                            f=median_avg, threshold=0.5, target_cols=target_cols)
+    valid_auc, valid_score = get_valid_score(valid_pred, valid,
+                                             f=median_avg, threshold=0.5, target_cols=target_cols)
 
     print(f"valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
 # %%
@@ -102,49 +111,60 @@ current best setting:
 '''
 resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 
-# util_cols = ['resp', 'resp_1', 'resp_2']
+util_cols = ['resp', 'resp_1', 'resp_2']
 # util_cols = ['resp']
 util_cols = resp_cols
-resp_index = [resp_cols_all.index(r) for r in util_cols] 
+resp_index = [resp_cols_all.index(r) for r in util_cols]
 
 # regularizer = RespMSELoss(alpha=1e-1, scaling=1, resp_index=resp_index)
-regularizer = UtilityLoss(alpha=1e-1, scaling=12, normalize=None, resp_index=resp_index)
+regularizer = UtilityLoss(alpha=1e-1, scaling=12,
+                          normalize=None, resp_index=resp_index)
 
 all_train = pd.concat([train, valid], axis=0)
-train_set = ExtendedMarketDataset(all_train, features=feat_cols, targets=target_cols, resp=resp_cols)
-train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
+all_train_set = ExtendedMarketDataset(
+    all_train, features=feat_cols, targets=target_cols, resp=resp_cols)
+train_loader = DataLoader(
+    all_train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
 
-finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
+scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE, 
+                                                    steps_per_epoch=len(train_loader), 
+                                                    epochs=EPOCHS)
 
+finetune_loader = DataLoader(
+    train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
 
 finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
 
-early_stop = EarlyStopping(patience=EARLYSTOP_NUM, mode="max")
+early_stop = EarlyStopping(patience=EARLYSTOP_NUM, mode="max", save_threshold=5500)
 # %%
-EPOCHS = 100
-_fold = 0
-SEED = 1127802
-get_seed(SEED)
+_fold = 4
+SEED = 1127
+get_seed(SEED+SEED*_fold)
 
 for epoch in range(EPOCHS):
-    tqdm.write(f"\nEpoch {epoch+1} for model {_fold}")
-    train_loss = train_epoch(model, optimizer, scheduler, loss_fn, train_loader, device)
-    if (epoch+1) % 3 ==0:
-        _ = train_epoch_finetune(model, finetune_optimizer, scheduler, 
-                            regularizer, finetune_loader, device, loss_fn=loss_fn)
+    
+    train_loss = train_epoch(model, optimizer, scheduler,
+                             loss_fn, train_loader, device)
+    lr = optimizer.param_groups[0]['lr']
+    if (epoch+1) % 5 == 0:
+        _ = train_epoch_finetune(model, finetune_optimizer, scheduler,
+                                 regularizer, finetune_loader, device, loss_fn=loss_fn)
 
     valid_pred = valid_epoch(model, valid_loader, device)
-    valid_auc, valid_score = get_valid_score(valid_pred, valid, 
-                                            f=median_avg, threshold=0.5, target_cols=target_cols)
-    model_file = MODEL_DIR+f"/resmlp_seed_{SEED}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
-    early_stop(valid_auc, model, model_path=model_file, epoch_utility_score=valid_score)
-    
-    tqdm.write(f"Train loss: {train_loss:.4f}")
+    valid_auc, valid_score = get_valid_score(valid_pred, valid,
+                                             f=median_avg, threshold=0.5, target_cols=target_cols)
+    model_file = MODEL_DIR + \
+        f"/resmlp_interleave_{_fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
+    early_stop(valid_auc, model, model_path=model_file,
+               epoch_utility_score=valid_score)
+    tqdm.write(f"\n[Epoch {epoch+1}/{EPOCHS}] \t Fold {_fold}")
+    tqdm.write(f"Train loss: {train_loss:.4f} \t Current learning rate: {lr:.4e}")
     tqdm.write(f"Early stop counter: {early_stop.counter} \t {early_stop.message} ")
     tqdm.write(f"Valid utility: {valid_score:.2f} \t Valid AUC: {valid_auc:.4f}\n")
     if early_stop.early_stop:
         print("\nEarly stopping")
         break
 
-# %%
-torch.save(model.state_dict(), MODEL_DIR+f"/resmlp_finetune_fold_{_fold}.pth")
+if DEBUG:
+    torch.save(model.state_dict(), MODEL_DIR+f"/resmlp_interleave_fold_{_fold}.pth")
+#%%

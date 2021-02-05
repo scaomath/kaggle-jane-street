@@ -272,6 +272,8 @@ class UtilityLoss(nn.Module):
         '''
         if self.resp_index is not None and len(self.resp_index) < 5:
             inputs = inputs[..., self.resp_index]
+            targets = targets[..., self.resp_index]
+
         inputs = F.sigmoid(self.scaling*inputs)       
         n_targets = inputs.size(-1)
         if n_targets > 1:
@@ -373,7 +375,7 @@ class EarlyStopping:
                 if self.counter >= self.patience: # a harder offset
                     self.early_stop = True
             else:
-                self.message = f'Utility score :({self.best_utility_score} --> {util_score}).'
+                self.message = f'Utility score :({self.best_utility_score:.2f} --> {util_score:.2f}).'
                 self.best_utility_score = util_score
                 if util_score > self.save_threshold:
                     self.message += " model saved."
@@ -389,7 +391,7 @@ class EarlyStopping:
                 if self.counter >= self.patience:
                     self.early_stop = True
             else:
-                self.message = f'Valid score :({self.best_score} --> {score}).'
+                self.message = f'Valid score :({self.best_score:.4f} --> {score:.4f}).'
                 self.best_score = score
                 if score > self.save_threshold:
                     self.message += " model saved."
