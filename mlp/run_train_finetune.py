@@ -25,10 +25,10 @@ DEBUG = False
 LOAD_PRETRAIN = False
 FINETUNE_BATCH_SIZE = 2048_00
 BATCH_SIZE = 12800
-EPOCHS = 200
+EPOCHS = 100
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-5
-EARLYSTOP_NUM = 6
+EARLYSTOP_NUM = 5
 NFOLDS = 1
 SCALING = 10
 THRESHOLD = 0.5
@@ -126,9 +126,11 @@ all_train_set = ExtendedMarketDataset(
 train_loader = DataLoader(
     all_train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
 
-scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE, 
-                                                    steps_per_epoch=len(train_loader), 
-                                                    epochs=EPOCHS)
+# scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE, 
+#                                                     steps_per_epoch=len(train_loader), 
+#                                                     epochs=EPOCHS)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, 
+                                        T_0=10, T_mult=1, eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
 
 finetune_loader = DataLoader(
     train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
@@ -146,7 +148,7 @@ for epoch in range(EPOCHS):
     train_loss = train_epoch(model, optimizer, scheduler,
                              loss_fn, train_loader, device)
     lr = optimizer.param_groups[0]['lr']
-    if (epoch+1) % 5 == 0:
+    if (epoch+1) % 10 == 0:
         _ = train_epoch_finetune(model, finetune_optimizer, scheduler,
                                  regularizer, finetune_loader, device, loss_fn=loss_fn)
 

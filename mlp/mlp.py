@@ -50,9 +50,10 @@ val_util_thresh = 5000
 class ResidualMLP(nn.Module):
     def __init__(self, hidden_size=256, 
                        output_size=len(target_cols), 
+                       input_size=len(all_feat_cols),
                        dropout_rate=0.2):
         super(ResidualMLP, self).__init__()
-        self.batch_norm0 = nn.BatchNorm1d(len(all_feat_cols))
+        self.batch_norm0 = nn.BatchNorm1d(input_size)
         self.dropout0 = nn.Dropout(0.2)
 
         self.dense1 = nn.Linear(len(all_feat_cols), hidden_size)
