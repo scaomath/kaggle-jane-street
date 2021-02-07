@@ -238,11 +238,11 @@ class ExtendedMarketDataset:
         }
 
 class SmoothBCEwLogits(_WeightedLoss):
-    def __init__(self, weight=None, reduction='mean', smoothing=0.0):
-        super().__init__(weight=weight, reduction=reduction)
+    def __init__(self, weight=None, smoothing=0.0):
+        super().__init__(weight=weight,)
         self.smoothing = smoothing
         self.weight = weight
-        self.reduction = reduction
+        # self.reduction = reduction
 
     @staticmethod
     def _smooth(targets:torch.Tensor, n_labels:int, smoothing=0.0):
@@ -251,15 +251,15 @@ class SmoothBCEwLogits(_WeightedLoss):
             targets = targets * (1.0 - smoothing) + 0.5 * smoothing
         return targets
 
-    def forward(self, inputs, targets):
+    def forward(self, inputs, targets, weights=None):
         targets = SmoothBCEwLogits._smooth(targets, inputs.size(-1),
             self.smoothing)
-        loss = F.binary_cross_entropy_with_logits(inputs, targets, self.weight)
+        if weights is not None:
+            loss = F.binary_cross_entropy_with_logits(inputs, targets, weight=weights)
+        else:
+            loss = F.binary_cross_entropy_with_logits(inputs, targets)
 
-        if  self.reduction == 'sum':
-            loss = loss.sum()
-        elif  self.reduction == 'mean':
-            loss = loss.mean()
+        # loss = loss.mean()
 
         return loss
 
@@ -432,10 +432,10 @@ class EarlyStopping:
                     self.early_stop = True
             else:
                 self.message = f'Utility score :({self.best_utility_score:.2f} --> {util_score:.2f}).'
-                self.best_utility_score = util_score
                 if util_score > self.save_threshold:
                     self.message += " model saved."
                     self.save_checkpoint(epoch_score, model, model_path)
+                self.best_utility_score = util_score
                 self.counter = 0
         else:
             if self.best_score is None:
@@ -477,6 +477,31 @@ def train_epoch(model, optimizer, scheduler, loss_fn, dataloader, device):
             label = data['label'].to(device)
             outputs = model(features)
             loss = loss_fn(outputs, label)
+            loss.backward()
+            optimizer.step()
+            if scheduler:
+                scheduler.step()
+
+            final_loss += loss.item()
+            pbar.update()
+
+    final_loss /= len(dataloader)
+
+    return final_loss
+
+def train_epoch_weighted(model, optimizer, scheduler, loss_fn, dataloader, device):
+    model.train()
+    final_loss = 0
+    len_data = len(dataloader)
+
+    with tqdm(total=len_data) as pbar:
+        for data in dataloader:
+            optimizer.zero_grad()
+            features = data['features'].to(device)
+            label = data['label'].to(device)
+            weights = torch.log(1+data['weight']).to(device)
+            outputs = model(features)
+            loss = loss_fn(outputs, label, weights=weights)
             loss.backward()
             optimizer.step()
             if scheduler:
@@ -590,7 +615,7 @@ def valid_epoch(model, dataloader, device):
 
     return preds
 
-def get_valid_score(preds, valid_df, f=median_avg, threshold=0.5,target_cols=target_cols):
+def get_valid_score(preds, valid_df, f=median_avg, threshold=0.5, target_cols=target_cols):
     valid_auc = roc_auc_score(valid_df[target_cols].values.astype(float).reshape(-1), preds)
     valid_logloss = log_loss(valid_df[target_cols].values.astype(float).reshape(-1), preds)
     valid_pred = preds.reshape(-1, len(target_cols))

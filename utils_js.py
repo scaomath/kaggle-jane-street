@@ -3,11 +3,13 @@ from sklearn.model_selection._split import _BaseKFold, indexable, _num_samples
 from sklearn.utils.validation import _deprecate_positional_args
 import numpy as np
 from numba import njit
-
+import os
 import math
 import torch
 from torch.optim import Optimizer
-
+HOME = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR = HOME+'/models/'
+DATA_DIR = HOME+'/data/'
 from utils import *
 
 
@@ -402,16 +404,28 @@ def preprocess_base(df, drop_weight=True):
     df = df[columns]
     return df
 
+def add_denoised_target(train_df):
+    target_denoised = pd.read_csv(os.path.join(DATA_DIR, 'target_dn.csv'))
+    train_df = pd.concat([train_df, target_denoised], axis=1)
+    train_df['action_dn'] = (train_df['resp_dn']>0).astype(int)
+    return train_df
+
 ## preprocess for torch model
-def preprocess_pt(train_file, day_split=450, drop_weight=False):
+def preprocess_pt(train_file, day_start=86, day_split=450, drop_zero_weight=False, denoised_resp=False):
     try:
         train = pd.read_parquet(train_file)
     except:
         train = pd.read_feather(train_file)
-    train = train.loc[train.date > 85].reset_index(drop=True)
+    train = train.loc[train.date >= day_start].reset_index(drop=True)
     
-    if drop_weight:
-        train = train[train['weight'] > 0].reset_index(drop = True)  
+    if denoised_resp:
+        train = add_denoised_target(train)
+
+    if drop_zero_weight:
+        train = train[train['weight'] > 0].reset_index(drop = True)
+    else:
+        train[['weight']] = train[['weight']].clip(1e-5)
+
     # vanilla actions based on resp
     train['action_0'] = (train['resp'] > 0).astype('int')
     for c in range(1,5):
@@ -500,7 +514,7 @@ def decision_threshold_optimisation(preds, date, weight, resp, low = 0, high = 1
     print(f'Optimal Utility Score:        {opt_utility}')
     return opt_threshold, opt_utility
 
-@njit
+# @njit
 def fast_fillna(array, values):
     if np.isnan(array.sum()):
         array = np.where(np.isnan(array), values, array)
