@@ -4,6 +4,7 @@ import os
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 import random as rd
 from contextlib import contextmanager
+from collections import defaultdict
 from time import time
 import matplotlib.pyplot as plt
 from datetime import date

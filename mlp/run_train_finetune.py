@@ -1,6 +1,4 @@
 # %%
-from mlp import *
-from utils import *
 from torchsummary import summary
 import os
 import sys
@@ -9,12 +7,14 @@ import torch.nn.functional as F
 import torch.nn as nn
 torch.backends.cudnn.deterministic = True  # for bincount
 
-
 current_path = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.dirname(current_path)
 MODEL_DIR = os.path.join(HOME,  'models')
 DATA_DIR = os.path.join(HOME,  'data')
 sys.path.append(HOME)
+
+from mlp import *
+from utils import *
 # %%
 
 '''
@@ -24,11 +24,11 @@ Training script finetuning using resp colums as regularizer
 DEBUG = False
 LOAD_PRETRAIN = False
 FINETUNE_BATCH_SIZE = 2048_00
-BATCH_SIZE = 12800
-EPOCHS = 100
+BATCH_SIZE = 2**14
+EPOCHS = 120
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-5
-EARLYSTOP_NUM = 5
+EARLYSTOP_NUM = 6
 NFOLDS = 1
 SCALING = 10
 THRESHOLD = 0.5
@@ -40,7 +40,6 @@ get_seed(SEED)
 # f = np.mean
 f = median_avg
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-# %%
 
 # %%
 with timer("Preprocessing train"):
@@ -59,7 +58,6 @@ feat_cols = [f'feature_{i}' for i in range(130)]
 # f_mean = np.mean(train[feat_cols[1:]].values, axis=0)
 feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
 
-
 # %%
 train_set = ExtendedMarketDataset(
     train, features=feat_cols, targets=target_cols, resp=resp_cols)
@@ -72,15 +70,51 @@ valid_loader = DataLoader(
     valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
 
 model = ResidualMLP(hidden_size=256, output_size=len(target_cols))
+# model = MLP(hidden_units=(None,160,160,160), input_dim=len(feat_cols), output_dim=len(target_cols))
 model.to(device)
 summary(model, input_size=(len(feat_cols), ))
+#%%
+'''
+fine-tuning the trained model based on resp or utils
+current fine-tuning train set is all train
+max batch_size:
+3 resps: 102400
 
-optimizer = torch.optim.Adam(
-    model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-# scheduler = None
+current best setting: 
+'''
+resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
+
+# util_cols = ['resp', 'resp_1', 'resp_2']
+util_cols = ['resp', 'resp_4']
+# util_cols = resp_cols
+resp_index = [resp_cols_all.index(r) for r in util_cols]
+
+# regularizer = RespMSELoss(alpha=1e-1, scaling=1, resp_index=resp_index)
+regularizer = UtilityLoss(alpha=5e-2, scaling=12,
+                          normalize=None, resp_index=resp_index)
 
 loss_fn = SmoothBCEwLogits(smoothing=0.005)
 
+all_train = pd.concat([train, valid], axis=0)
+all_train_set = ExtendedMarketDataset(all_train, features=feat_cols, targets=target_cols, resp=resp_cols)
+train_loader = DataLoader(all_train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
+
+# optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+optimizer = RAdam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+optimizer = Lookahead(optimizer=optimizer, alpha=1e-1)
+# scheduler = None
+
+# scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE, 
+#                                                     steps_per_epoch=len(train_loader), 
+#                                                     epochs=EPOCHS)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, 
+                                        T_0=10, T_mult=1, eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
+
+finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
+
+finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
+
+early_stop = EarlyStopping(patience=EARLYSTOP_NUM, mode="max", save_threshold=5500)
 
 # %%
 if LOAD_PRETRAIN:
@@ -101,46 +135,8 @@ if LOAD_PRETRAIN:
 
     print(f"valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
 # %%
-'''
-fine-tuning the trained model based on resp or utils
-current fine-tuning train set is all train
-max batch_size:
-3 resps: 102400
-
-current best setting: 
-'''
-resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
-
-util_cols = ['resp', 'resp_1', 'resp_2']
-# util_cols = ['resp']
-util_cols = resp_cols
-resp_index = [resp_cols_all.index(r) for r in util_cols]
-
-# regularizer = RespMSELoss(alpha=1e-1, scaling=1, resp_index=resp_index)
-regularizer = UtilityLoss(alpha=1e-1, scaling=12,
-                          normalize=None, resp_index=resp_index)
-
-all_train = pd.concat([train, valid], axis=0)
-all_train_set = ExtendedMarketDataset(
-    all_train, features=feat_cols, targets=target_cols, resp=resp_cols)
-train_loader = DataLoader(
-    all_train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
-
-# scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE, 
-#                                                     steps_per_epoch=len(train_loader), 
-#                                                     epochs=EPOCHS)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, 
-                                        T_0=10, T_mult=1, eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
-
-finetune_loader = DataLoader(
-    train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
-
-finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
-
-early_stop = EarlyStopping(patience=EARLYSTOP_NUM, mode="max", save_threshold=5500)
-# %%
-_fold = 4
-SEED = 1127
+_fold = 2
+SEED = 20181127
 get_seed(SEED+SEED*_fold)
 
 for epoch in range(EPOCHS):
@@ -161,7 +157,7 @@ for epoch in range(EPOCHS):
                epoch_utility_score=valid_score)
     tqdm.write(f"\n[Epoch {epoch+1}/{EPOCHS}] \t Fold {_fold}")
     tqdm.write(f"Train loss: {train_loss:.4f} \t Current learning rate: {lr:.4e}")
-    tqdm.write(f"Early stop counter: {early_stop.counter} \t {early_stop.message} ")
+    tqdm.write(f"Best util: {early_stop.best_utility_score:.2f} \t {early_stop.message} ")
     tqdm.write(f"Valid utility: {valid_score:.2f} \t Valid AUC: {valid_auc:.4f}\n")
     if early_stop.early_stop:
         print("\nEarly stopping")

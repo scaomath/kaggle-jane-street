@@ -38,6 +38,9 @@ feat_cols = [f'feature_{i}' for i in range(130)]
 resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 target_cols = ['action_0', 'action_1', 'action_2', 'action_3', 'action_4']
 
+hidden_units = [None, 160, 160, 160]
+dropout_rates = [0.2, 0.2, 0.2, 0.2]
+
 f_mean = np.load(os.path.join(DATA_DIR,'f_mean.npy'))
 
 ##### Making features
@@ -122,6 +125,56 @@ class ResidualMLP(nn.Module):
 
         x = self.dense5(x)
 
+        return x
+
+
+class MLP(nn.Module):
+    def __init__(self, hidden_units=hidden_units,
+                       dropout_rates=dropout_rates,
+                       input_dim=len(all_feat_cols),
+                       output_dim=len(target_cols)):
+        super(MLP, self).__init__()
+        self.batch_norm0 = nn.BatchNorm1d(input_dim)
+        self.dropout0 = nn.Dropout(dropout_rates[0])
+        
+        self.dense1 = nn.Linear(input_dim, hidden_units[1])
+        self.batch_norm1 = nn.BatchNorm1d(hidden_units[1]) 
+        self.dropout1 = nn.Dropout(dropout_rates[1])
+        
+        self.dense2 = nn.Linear(hidden_units[1], hidden_units[2])
+        self.batch_norm2 = nn.BatchNorm1d(hidden_units[2])
+        self.dropout2 = nn.Dropout(dropout_rates[2])
+        
+        self.dense3 = nn.Linear(hidden_units[2], hidden_units[3])
+        self.batch_norm3 = nn.BatchNorm1d(hidden_units[3])
+        self.dropout3 = nn.Dropout(dropout_rates[3])
+        
+        self.dense4 = nn.Linear(hidden_units[3], output_dim)
+        
+        self.silu = nn.SiLU()
+        # self.sigmoid = nn.Sigmoid()
+        
+    def forward(self, x):
+        x = self.batch_norm0(x)
+        x = self.dropout0(x)
+        
+        x = self.dense1(x)
+        x = self.batch_norm1(x)
+        x = self.silu(x)
+        x = self.dropout1(x)
+    
+        x = self.dense2(x)
+        x = self.batch_norm2(x)
+        x = self.silu(x)
+        x = self.dropout2(x)
+        
+        x = self.dense3(x)
+        x = self.batch_norm3(x)
+        x = self.silu(x)
+        x = self.dropout3(x)
+        
+        x = self.dense4(x)
+        
         return x
 
 class RunningEWMean:
@@ -258,56 +311,58 @@ class RespMSELoss(nn.Module):
 class UtilityLoss(nn.Module):
     def __init__(self, weight=None, alpha=None, scaling=None, normalize='mean', resp_index=None):
         super(UtilityLoss, self).__init__()
-        self.alpha = alpha if normalize == 'mean' else alpha*1e-3 # the strength of this regularization
+        self.alpha = alpha if normalize == 'mean' else alpha * \
+            1e-3  # the strength of this regularization
         self.normalize = normalize
         self.scaling = scaling
         self.weight = weight
         self.resp_index = resp_index
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    def forward(self, inputs, targets, weight=None, date=None):
+    def forward(self, inputs, targets, weights=None, date=None):
         '''
         inputs: prediction of the model (without sigmoid, processed with a scaling)
         targets: resp columns
         negative of the utility for minimization
         '''
-        if self.resp_index is not None and len(self.resp_index) < 5:
+        if (self.resp_index is not None) and (len(self.resp_index) < 5):
             inputs = inputs[..., self.resp_index]
             targets = targets[..., self.resp_index]
 
-        inputs = F.sigmoid(self.scaling*inputs)       
-        n_targets = inputs.size(-1)
+        inputs = F.sigmoid(self.scaling*inputs)
+        n_targets = len(self.resp_index)
         if n_targets > 1:
-            weight = weight.repeat((n_targets,1))
-            date = date.repeat((n_targets,1))
+            weights = weights.repeat((n_targets, 1))
+            date = date.repeat((n_targets, 1))
 
-        #flatten label and prediction tensors
+        # flatten label and prediction tensors
         inputs = inputs.view(-1)
         targets = targets.view(-1)
-        weight = weight.view(-1)
+        weights = weights.view(-1)
         date = date.view(-1)
 
-        dates = date.unique().detach().cpu()
+        dates = date.unique().detach()
         ndays = len(dates)
 
-        Pi = torch.zeros((ndays, 1), dtype=torch.float32)
+        Pi = torch.zeros((ndays, 1), device=self.device, dtype=torch.float32)
         for i, day in enumerate(dates):
             mask = (date == day)
-            Pi[i] = (weight[mask]*targets[mask]*inputs[mask]).sum()
-        
+            Pi[i] = (weights[mask]*targets[mask]*inputs[mask]).sum()
+
         # a single day
         # DEBUG notes: bincount is not differentiable for autograd
         # Pi = torch.bincount(date, weight * targets * inputs)
         # loss = Pi.sum()*(Pi.sum().clamp(min=0))/(Pi.square().sum())
         # loss = (Pi.sum()).square()/(Pi.square().sum())
-        
+
         sumPi = Pi.sum()
         if self.normalize == 'mean':
-            loss = -self.alpha*sumPi*(sumPi.clamp(min=0))/(Pi.square().sum())/ndays
+            loss = -self.alpha*sumPi * \
+                (sumPi.clamp(min=0))/(Pi.square().sum())/ndays
         else:
             loss = -self.alpha*sumPi*(sumPi.clamp(min=0))/ndays
-        
-        return loss.to(self.device)
+
+        return loss
 
 #Designed to do all features at the same time, but Kaggle kernels are memory limited.
 class NeutralizeTransform:
@@ -410,76 +465,6 @@ class EarlyStopping:
 
 
 
-class Lookahead(Optimizer):
-    '''
-    https://github.com/alphadl/lookahead.pytorch
-    '''
-    def __init__(self, optimizer, k=5, alpha=0.5):
-        self.optimizer = optimizer
-        self.k = k
-        self.alpha = alpha
-        self.param_groups = self.optimizer.param_groups
-        self.state = defaultdict(dict)
-        self.fast_state = self.optimizer.state
-        for group in self.param_groups:
-            group["counter"] = 0
-    
-    def update(self, group):
-        for fast in group["params"]:
-            param_state = self.state[fast]
-            if "slow_param" not in param_state:
-                param_state["slow_param"] = torch.zeros_like(fast.data)
-                param_state["slow_param"].copy_(fast.data)
-            slow = param_state["slow_param"]
-            slow += (fast.data - slow) * self.alpha
-            fast.data.copy_(slow)
-    
-    def update_lookahead(self):
-        for group in self.param_groups:
-            self.update(group)
-
-    def step(self, closure=None):
-        loss = self.optimizer.step(closure)
-        for group in self.param_groups:
-            if group["counter"] == 0:
-                self.update(group)
-            group["counter"] += 1
-            if group["counter"] >= self.k:
-                group["counter"] = 0
-        return loss
-
-    def state_dict(self):
-        fast_state_dict = self.optimizer.state_dict()
-        slow_state = {
-            (id(k) if isinstance(k, torch.Tensor) else k): v
-            for k, v in self.state.items()
-        }
-        fast_state = fast_state_dict["state"]
-        param_groups = fast_state_dict["param_groups"]
-        return {
-            "fast_state": fast_state,
-            "slow_state": slow_state,
-            "param_groups": param_groups,
-        }
-
-    def load_state_dict(self, state_dict):
-        slow_state_dict = {
-            "state": state_dict["slow_state"],
-            "param_groups": state_dict["param_groups"],
-        }
-        fast_state_dict = {
-            "state": state_dict["fast_state"],
-            "param_groups": state_dict["param_groups"],
-        }
-        super(Lookahead, self).load_state_dict(slow_state_dict)
-        self.optimizer.load_state_dict(fast_state_dict)
-        self.fast_state = self.optimizer.state
-
-    def add_param_group(self, param_group):
-        param_group["counter"] = 0
-        self.optimizer.add_param_group(param_group)
-
-
 def train_epoch(model, optimizer, scheduler, loss_fn, dataloader, device):
     model.train()
     final_loss = 0
@@ -518,10 +503,10 @@ def train_epoch_utility(model, optimizer, scheduler, regularizer, dataloader, de
             features = data['features'].to(device)
             label = data['label'].to(device)
             weight = data['weight'].to(device)
-            resp = data['resp'].view(-1).to(device)
-            date = data['date'].view(-1).to(device)
+            resp = data['resp'].to(device)
+            date = data['date'].to(device)
             outputs = model(features)
-            loss = regularizer(outputs, resp, weight=weight, date=date)
+            loss = regularizer(outputs, resp, weights=weight, date=date)
             util_loss += -loss.item()
             if loss_fn is not None:
                 _loss = loss_fn(outputs, label)
@@ -556,13 +541,10 @@ def train_epoch_finetune(model, optimizer, scheduler, regularizer, dataloader, d
             features = data['features'].to(device)
             label = data['label'].to(device)
             weight = data['weight'].to(device)
-            resp = data['resp'].view(-1).to(device)
-            date = data['date'].view(-1).to(device)
+            resp = data['resp'].to(device)
+            date = data['date'].to(device)
             outputs = model(features)
-            if weighted:
-                loss = regularizer(outputs, resp, weight=weight, date=date)
-            else:
-                loss = regularizer(outputs, resp)
+            loss = regularizer(outputs, resp, weights=weight, date=date)
 
             if loss.item() < 0:
                 utils_loss += -loss.item()
