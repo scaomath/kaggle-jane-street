@@ -13,7 +13,8 @@
 - [ ] Using `feature_0` to choose models.
 - [ ] Using rolling mean of previous days as input, working out a submission pipeline.
 - [x] Implement a regularizer using the utility function.
-- [x] Pretrain with all weights (maybe making `weight==0` rows' weights to certain small number), then train with all positive `weight` rows.
+- [x] Train with all weights (maybe making `weight==0` rows' weights to certain small number `1e-5`), then train with all positive `weight` rows.
+- [x] Train with a weighted cross entropy loss, the weight is $\ln(1+w)$; the local CV became better but public leaderboard became worse. 
 - [x] Adding one or multiple denoised targets by removing the eigenvalues of the covariance matrix.
 
 # Ideas and notes
@@ -51,6 +52,8 @@ Current NN models use `date>85` and `weight>0`.
 ## A new Residual+MLP model
 - The key is to train using the actual `resp` columns as target, and when doing the inference, apply the sigmoid function to the output (why `BCEwLogits` performs better than `CrossEntropy`???).
 - Set up the baseline training, adding a 16-target model (using various sums between the `resp` columns).
+- Tested the sensitivity of seeds to the CV vs public leaderboard. Bigger model in general is less sensitive than smaller models (esp the seed 1111 overfit model).
+- A local-public LB stable training strategy: RAdam/Adam with cosine annealing scheduler, utility function regularizer finetuning every 10 epochs with a `1e-3*lr` learning rate, 1 or 2 denoised targets added, 50% median average ensembling. 
 
 # Gradient boosting models
 ## XGBoost:
