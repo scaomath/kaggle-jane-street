@@ -55,7 +55,7 @@ for c in range(1, 5):
 
 resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 resp_cols_all = resp_cols
-target_cols = ['action_0', 'action_1', 'action_2', 'action_3', 'action_4']
+target_cols = ['action', 'action_1', 'action_2', 'action_3', 'action_4']
 feat_cols = [f'feature_{i}' for i in range(130)]
 # f_mean = np.mean(train[feat_cols[1:]].values, axis=0)
 feat_cols.extend(['cross_41_42_43', 'cross_1_2'])

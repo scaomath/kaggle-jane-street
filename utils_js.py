@@ -404,22 +404,26 @@ def preprocess_base(df, drop_weight=True):
     df = df[columns]
     return df
 
-def add_denoised_target(train_df):
-    target_denoised = pd.read_csv(os.path.join(DATA_DIR, 'target_dn.csv'))
-    train_df = pd.concat([train_df, target_denoised], axis=1)
-    train_df['action_dn'] = (train_df['resp_dn']>0).astype(int)
+def add_denoised_target(train_df, num_dn_target=1):
+    for i in range(num_dn_target):
+        target_denoised = pd.read_csv(os.path.join(DATA_DIR, f'target_dn_{i}.csv'))
+        train_df = pd.concat([train_df, target_denoised], axis=1)
+        train_df[f'action_dn_{i}'] = (train_df[f'resp_dn_{i}']>0).astype(int)
     return train_df
 
 ## preprocess for torch model
-def preprocess_pt(train_file, day_start=86, day_split=450, drop_zero_weight=False, denoised_resp=False):
+def preprocess_pt(train_file, day_start=86, day_split=450, 
+                  drop_zero_weight=True, denoised_resp=False, num_dn_target=None):
     try:
         train = pd.read_parquet(train_file)
     except:
         train = pd.read_feather(train_file)
     train = train.loc[train.date >= day_start].reset_index(drop=True)
     
-    if denoised_resp:
+    if denoised_resp and num_dn_target is None:
         train = add_denoised_target(train)
+    elif denoised_resp and num_dn_target >= 2:
+        train = add_denoised_target(train, num_dn_target=num_dn_target)
 
     if drop_zero_weight:
         train = train[train['weight'] > 0].reset_index(drop = True)
@@ -427,7 +431,7 @@ def preprocess_pt(train_file, day_start=86, day_split=450, drop_zero_weight=Fals
         train[['weight']] = train[['weight']].clip(1e-5)
 
     # vanilla actions based on resp
-    train['action_0'] = (train['resp'] > 0).astype('int')
+    train['action'] = (train['resp'] > 0).astype('int')
     for c in range(1,5):
         train['action_'+str(c)] = (train['resp_'+str(c)] > 0).astype('int')
 

@@ -113,7 +113,7 @@ class RMTDenoising(BaseEstimator, TransformerMixin):
         eVal0, eVec0 = getPCA(corr0)
         eMax0, var0 = findMaxEval(np.diag(eVal0), q, bWidth=self.bWidth)
         nFacts0 = eVal0.shape[0] - np.diag(eVal0)[::-1].searchsorted(eMax0)
-        corr1 = denoisedCorr2(eVal0,eVec0,nFacts0,alpha=self.alpha)
+        corr1 = denoisedCorr2(eVal0, eVec0, nFacts0, alpha=self.alpha)
         eVal1, eVec1 = getPCA(corr1)
         #result = np.hstack((np.diag(eVal1), var0))
         #name = [f'eigen_{i+1}' for i in range(len(eVal1))] + ['var_explained']
@@ -144,16 +144,25 @@ if __name__ == '__main__':
 
     train = train.loc[train.date > 85].reset_index(drop=True)
 
-    #%%
+
+    '''
+    0: all resps
+    1: resp, 3, 4
+    2: resp, 1, 2
+    '''
+    _f = 0
     targets = ['resp','resp_1','resp_2','resp_3','resp_4']
+    # targets = ['resp','resp_3','resp_4']
+    # targets = ['resp','resp_1','resp_2']
     targets_f0 = targets + ['feature_0']
-    target_tf = RMTDenoising(sample=0.8, seed=1127)
+
+    target_tf = RMTDenoising(sample=0.8, seed=1127802+_f)
 
     target_tf.fit(train[targets_f0])
 
     targets_denoised = target_tf.transform(train[targets_f0])
-    targets_denoised = targets_denoised.rename(columns={'proj_0': 'resp_dn'})
-    targets_denoised[['resp_dn']] = -targets_denoised['resp_dn'].values
+    targets_denoised = targets_denoised.rename(columns={'proj_0': f'resp_dn_{_f}'})
+    targets_denoised[[f'resp_dn_{_f}']] = -targets_denoised[f'resp_dn_{_f}'].values
     print(targets_denoised.head(10))
     print(train[targets_f0].head(10))
-    targets_denoised[['resp_dn']].to_csv(os.path.join(DATA_DIR,'target_dn.csv'), index=False)
+    targets_denoised[[f'resp_dn_{_f}']].to_csv(os.path.join(DATA_DIR,f'target_dn_{_f}.csv'), index=False)

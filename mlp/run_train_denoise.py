@@ -46,17 +46,17 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 with timer("Preprocessing train"):
     train_parquet = os.path.join(DATA_DIR, 'train.parquet')
     train, valid = preprocess_pt(train_parquet, day_start=TRAINING_START, 
-                                 drop_zero_weight=False, denoised_resp=True)
+                                 drop_zero_weight=True, denoised_resp=True, num_dn_target=2)
 
-print(f'action based on resp mean:   ', train['action_0'].astype(int).mean())
-print(f'action based on resp_dn mean:', train['action_dn'].astype(int).mean())
+print(f'action based on resp mean:   ', train['action'].astype(int).mean())
+print(f'action based on resp_dn_0 mean:', train['action_dn_0'].astype(int).mean())
 for c in range(1, 5):
     print(f'action based on resp_{c} mean: ',
           train['action_'+str(c)].astype(int).mean())
 
-resp_cols = ['resp_dn', 'resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
+resp_cols = ['resp', 'resp_dn_0', 'resp_dn_1', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 resp_cols_all = resp_cols
-target_cols = ['action_dn', 'action_0', 'action_1', 'action_2', 'action_3', 'action_4']
+target_cols = ['action','action_dn_0', 'action_dn_1', 'action_1', 'action_2', 'action_3', 'action_4']
 feat_cols = [f'feature_{i}' for i in range(130)]
 # f_mean = np.mean(train[feat_cols[1:]].values, axis=0)
 feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
@@ -82,7 +82,7 @@ max batch_size:
 
 current best setting: 
 '''
-resp_cols = ['resp_dn', 'resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
+resp_cols = ['resp', 'resp_dn_0', 'resp_dn_1', 'resp_1', 'resp_2', 'resp_3', 'resp_4'] 
 
 # util_cols = ['resp', 'resp_1', 'resp_2']
 # util_cols = ['resp', 'resp_4']
@@ -111,7 +111,8 @@ optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=
 #                                                     steps_per_epoch=len(train_loader),
 #                                                     epochs=EPOCHS)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
-                                                                 T_0=10, T_mult=1, eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
+                                                                 T_0=10, T_mult=2, 
+                                                                 eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
 
 finetune_loader = DataLoader(
     train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
@@ -141,14 +142,14 @@ if LOAD_PRETRAIN:
 
     print(f"valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
 # %%
-_fold = 1
-SEED = 802
+_fold = 9
+SEED = 20181127
 get_seed(SEED+SEED*_fold)
 
 for epoch in range(EPOCHS):
 
-    # train_loss = train_epoch(model, optimizer, scheduler,loss_fn, train_loader, device)
-    train_loss = train_epoch_weighted(model, optimizer, scheduler, loss_fn, train_loader, device)
+    train_loss = train_epoch(model, optimizer, scheduler,loss_fn, train_loader, device)
+    # train_loss = train_epoch_weighted(model, optimizer, scheduler, loss_fn, train_loader, device)
     lr = optimizer.param_groups[0]['lr']
     if (epoch+1) % 10 == 0:
         _ = train_epoch_finetune(model, finetune_optimizer, scheduler,
@@ -176,7 +177,8 @@ if DEBUG:
     torch.save(model.state_dict(), MODEL_DIR + f"/resmlp_interleave_fold_{_fold}.pth")
 
 # %%
-model_file = f"resmlp_interleave_0_util_7437_auc_0.6389.pth"
+# model_file = f"resmlp_interleave_0_util_7437_auc_0.6389.pth"
+model_file = 'resmlp_interleave_9_util_7953_auc_0.6381.pth'
 print(f"Loading {model_file} for cv check.")
 model_weights = os.path.join(MODEL_DIR, model_file)
 
@@ -185,11 +187,11 @@ try:
 except:
     model.load_state_dict(torch.load(
         model_weights, map_location=torch.device('cpu')))
-model.eval()
+model.eval();
 
 # %%
 CV_START_DAY = 100
-CV_DAYS = 25
+CV_DAYS = 50
 print_all_valid_score(all_train, model, start_day=CV_START_DAY, num_days=CV_DAYS, 
                         batch_size = 8192, f=median_avg, threshold=0.5, 
                         target_cols=target_cols, feat_cols=feat_cols,resp_cols=resp_cols)
