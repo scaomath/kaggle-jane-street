@@ -5,15 +5,16 @@
 - [x] A simple starter
 - [x] Stable CV-LB strategy (Update Jan 22, now I think this is somehow impossible)
 - [x] Writing a simple `iter_env` simulator
-- [ ] Testing a moving average `fillna()` strategy
+- [ ] Testing a moving average `fillna()` strategy in both train and inference pipeline.
 - [ ] Testing a past mean `fillna()`, fill the NaN using the mean only from prior day data, no intraday data.
 - [x] Using the `iter_env` simulator to test the impact of different threshold: 0.502 or 0.498 can be both better than 0.5? Need an explanation...
 - [ ] A table compiling what features will be using `ffill`, previous day mean, overall mean, etc.
 - [ ] Trading frequency can be determined by number of trades per day, store this in a cache to choose model.
 - [ ] Using `feature_0` to choose models.
 - [ ] Using rolling mean of previous days as input, working out a submission pipeline.
-- [ ] Implement a regularizer using the utility function.
-- [ ] Pretrain with all weights (maybe making `weight==0` rows' weights to certain small number), then train with all positive `weight` rows.
+- [x] Implement a regularizer using the utility function.
+- [x] Pretrain with all weights (maybe making `weight==0` rows' weights to certain small number), then train with all positive `weight` rows.
+- [x] Adding one or multiple denoised targets by removing the eigenvalues of the covariance matrix.
 
 # Ideas and notes
 - Final sub: 1 with best public LB+CV, 1 experimental.
