@@ -46,17 +46,16 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 with timer("Preprocessing train"):
     train_parquet = os.path.join(DATA_DIR, 'train.parquet')
     train, valid = preprocess_pt(train_parquet, day_start=TRAINING_START, 
-                                 drop_zero_weight=False, denoised_resp=True)
+                                 drop_zero_weight=False, denoised_resp=False)
 
 print(f'action based on resp mean:   ', train['action_0'].astype(int).mean())
-print(f'action based on resp_dn mean:', train['action_dn'].astype(int).mean())
 for c in range(1, 5):
     print(f'action based on resp_{c} mean: ',
           train['action_'+str(c)].astype(int).mean())
 
-resp_cols = ['resp_dn', 'resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
+resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 resp_cols_all = resp_cols
-target_cols = ['action_dn', 'action_0', 'action_1', 'action_2', 'action_3', 'action_4']
+target_cols = ['action_0', 'action_1', 'action_2', 'action_3', 'action_4']
 feat_cols = [f'feature_{i}' for i in range(130)]
 # f_mean = np.mean(train[feat_cols[1:]].values, axis=0)
 feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
@@ -82,7 +81,7 @@ max batch_size:
 
 current best setting: 
 '''
-resp_cols = ['resp_dn', 'resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
+resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 
 # util_cols = ['resp', 'resp_1', 'resp_2']
 # util_cols = ['resp', 'resp_4']
@@ -91,20 +90,16 @@ util_cols = resp_cols
 resp_index = [resp_cols_all.index(r) for r in util_cols]
 
 # regularizer = RespMSELoss(alpha=1e-1, scaling=1, resp_index=resp_index)
-regularizer = UtilityLoss(alpha=1e-1, scaling=12,
-                          normalize=None, resp_index=resp_index)
+regularizer = UtilityLoss(alpha=1e-1, scaling=12, normalize=None, resp_index=resp_index)
 
 loss_fn = SmoothBCEwLogits(smoothing=0.005)
 
 all_train = pd.concat([train, valid], axis=0)
-all_train_set = ExtendedMarketDataset(
-    all_train, features=feat_cols, targets=target_cols, resp=resp_cols)
-train_loader = DataLoader(
-    all_train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
+all_train_set = ExtendedMarketDataset(all_train, features=feat_cols, targets=target_cols, resp=resp_cols)
+train_loader = DataLoader(all_train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-# optimizer = RAdam(model.parameters(), lr=LEARNING_RATE,
-#                   weight_decay=WEIGHT_DECAY)
+# optimizer = RAdam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 # optimizer = Lookahead(optimizer=optimizer, alpha=1e-1)
 # scheduler = None
 
@@ -112,13 +107,12 @@ optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=
 #                                                     steps_per_epoch=len(train_loader),
 #                                                     epochs=EPOCHS)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
-                                                                 T_0=10, T_mult=1, eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
+                                                                 T_0=10, T_mult=1, 
+                                                                 eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
 
-finetune_loader = DataLoader(
-    train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
+finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
 
-finetune_optimizer = torch.optim.Adam(
-    model.parameters(), lr=LEARNING_RATE*1e-3)
+finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
 
 early_stop = EarlyStopping(patience=EARLYSTOP_NUM,
                            mode="max", save_threshold=6000)
@@ -203,19 +197,4 @@ for _day in range(CV_START_DAY, 500, CV_DAYS):
         valid_pred, _valid, f=median_avg, threshold=0.5, target_cols=target_cols)
     print(
         f"Day {_day}-{_day+CV_DAYS-1}: valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
-# %%
-if DEBUG:
-    model.train()
-    final_loss = 0
-    data = next(iter(train_loader))
-    optimizer.zero_grad()
-    _features = data['features'].to(device)
-    _label = data['label'].to(device)
-    _weights = torch.log(1+data['weight']).to(device)
-    _outputs = model(_features)
-
-    targets = SmoothBCEwLogits._smooth(_label, _outputs.size(-1), 0.005)
-    _loss = F.binary_cross_entropy_with_logits(_outputs, _label, weight=_weights)
-
-    # _loss = loss_fn(_outputs, _label, weights=_weights)
 # %%

@@ -627,6 +627,25 @@ def get_valid_score(preds, valid_df, f=median_avg, threshold=0.5, target_cols=ta
                                         resp=valid_df.resp.values, 
                                         action=valid_pred)
     return valid_auc, valid_score
+
+
+def print_all_valid_score(df, model, start_day=100, num_days=50, 
+                          batch_size = 8192,
+                          f=median_avg, threshold=0.5, 
+                          target_cols=target_cols,
+                          feat_cols=feat_cols,
+                          resp_cols=resp_cols):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    for _day in range(start_day, 500, num_days):
+        _valid = df[df.date.isin(range(_day, _day+num_days))]
+        _valid = _valid[_valid.weight > 0]
+        valid_set = ExtendedMarketDataset(_valid, features=feat_cols, targets=target_cols, resp=resp_cols)
+        valid_loader = DataLoader(valid_set, batch_size=batch_size, shuffle=False, num_workers=8, drop_last=False)
+        valid_pred = valid_epoch(model, valid_loader, device)
+        valid_auc, valid_score = get_valid_score(valid_pred, _valid, f=f, threshold=threshold, target_cols=target_cols)
+        print(
+            f"Day {_day}-{_day+num_days-1}: valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
+            
 #%%
 if __name__ == '__main__':
 

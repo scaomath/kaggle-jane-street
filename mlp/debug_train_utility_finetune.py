@@ -289,3 +289,16 @@ if DEBUG:
 
     # loss.backward()
 # %%
+# %%
+if DEBUG:
+    model.train()
+    final_loss = 0
+    data = next(iter(train_loader))
+    optimizer.zero_grad()
+    _features = data['features'].to(device)
+    _label = data['label'].to(device)
+    _weights = torch.log(1+data['weight']).to(device)
+    _outputs = model(_features)
+
+    targets = SmoothBCEwLogits._smooth(_label, _outputs.size(-1), 0.005)
+    _loss = F.binary_cross_entropy_with_logits(_outputs, _label, weight=_weights)
