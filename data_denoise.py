@@ -150,13 +150,14 @@ if __name__ == '__main__':
     1: resp, 3, 4
     2: resp, 1, 2
     '''
-    _f = 0
-    targets = ['resp','resp_1','resp_2','resp_3','resp_4']
+    _f = 1
+    # targets = ['resp','resp_1','resp_2','resp_3','resp_4']
     # targets = ['resp','resp_3','resp_4']
     # targets = ['resp','resp_1','resp_2']
+    targets = ['resp','resp_2','resp_4']
     targets_f0 = targets + ['feature_0']
 
-    target_tf = RMTDenoising(sample=0.8, seed=1127802+_f)
+    target_tf = RMTDenoising(sample=0.7, seed=1127802+_f)
 
     target_tf.fit(train[targets_f0])
 

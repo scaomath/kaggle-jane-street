@@ -413,16 +413,14 @@ def add_denoised_target(train_df, num_dn_target=1):
 
 ## preprocess for torch model
 def preprocess_pt(train_file, day_start=86, day_split=450, 
-                  drop_zero_weight=True, denoised_resp=False, num_dn_target=None):
+                  drop_zero_weight=True, denoised_resp=False, num_dn_target=1):
     try:
         train = pd.read_parquet(train_file)
     except:
         train = pd.read_feather(train_file)
     train = train.loc[train.date >= day_start].reset_index(drop=True)
     
-    if denoised_resp and num_dn_target is None:
-        train = add_denoised_target(train)
-    elif denoised_resp and num_dn_target >= 2:
+    if denoised_resp:
         train = add_denoised_target(train, num_dn_target=num_dn_target)
 
     if drop_zero_weight:
