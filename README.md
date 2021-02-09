@@ -5,15 +5,17 @@
 - [x] A simple starter
 - [x] Stable CV-LB strategy (Update Jan 22, now I think this is somehow impossible)
 - [x] Writing a simple `iter_env` simulator
-- [ ] Testing a moving average `fillna()` strategy
+- [ ] Testing a moving average `fillna()` strategy in both train and inference pipeline.
 - [ ] Testing a past mean `fillna()`, fill the NaN using the mean only from prior day data, no intraday data.
 - [x] Using the `iter_env` simulator to test the impact of different threshold: 0.502 or 0.498 can be both better than 0.5? Need an explanation...
 - [ ] A table compiling what features will be using `ffill`, previous day mean, overall mean, etc.
 - [ ] Trading frequency can be determined by number of trades per day, store this in a cache to choose model.
 - [ ] Using `feature_0` to choose models.
 - [ ] Using rolling mean of previous days as input, working out a submission pipeline.
-- [ ] Implement a regularizer using the utility function.
-- [ ] Pretrain with all weights (maybe making `weight==0` rows' weights to certain small number), then train with all positive `weight` rows.
+- [x] Implement a regularizer using the utility function.
+- [x] Train with all weights (maybe making `weight==0` rows' weights to certain small number `1e-5`), then train with all positive `weight` rows.
+- [x] Train with a weighted cross entropy loss, the weight is $\ln(1+w)$; the local CV became better but public leaderboard became worse. 
+- [x] Adding one or multiple denoised targets by removing the eigenvalues of the covariance matrix.
 
 # Ideas and notes
 - Final sub: 1 with best public LB+CV, 1 experimental.
@@ -50,6 +52,8 @@ Current NN models use `date>85` and `weight>0`.
 ## A new Residual+MLP model
 - The key is to train using the actual `resp` columns as target, and when doing the inference, apply the sigmoid function to the output (why `BCEwLogits` performs better than `CrossEntropy`???).
 - Set up the baseline training, adding a 16-target model (using various sums between the `resp` columns).
+- Tested the sensitivity of seeds to the CV vs public leaderboard. Bigger model in general is less sensitive than smaller models (esp the seed 1111 overfit model).
+- A local-public LB stable training strategy: RAdam/Adam with cosine annealing scheduler, utility function regularizer finetuning every 10 epochs with a `1e-3*lr` learning rate, 1 or 2 denoised targets added, 50% median average ensembling. 
 
 # Gradient boosting models
 ## XGBoost:
