@@ -37,12 +37,13 @@ NFOLDS = 5
 feat_cols = [f'feature_{i}' for i in range(130)]
 resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 target_cols = ['action_0', 'action_1', 'action_2', 'action_3', 'action_4']
+tag_cols = [f'tag_{i}' for i in range(29)]
 
 hidden_units = [None, 160, 160, 160]
 dropout_rates = [0.2, 0.2, 0.2, 0.2]
 
 f_mean = np.load(os.path.join(DATA_DIR,'f_mean.npy'))
-
+features_tag_file = os.path.join(DATA_DIR, 'features.csv')
 ##### Making features
 all_feat_cols = [col for col in feat_cols]
 all_feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
@@ -176,6 +177,135 @@ class MLP(nn.Module):
         x = self.dense4(x)
         
         return x
+
+
+class FeatureFFN (nn.Module):
+    
+    def __init__(self, inputCount=130, 
+                 outputCount=5, 
+                 hiddenLayerCounts=[150, 150, 150], 
+                 drop_prob=0.2, 
+                 activation=nn.SiLU() # this is swish activation
+                 ):
+        '''
+        Feature generation embedding net, no output
+        '''
+        super(FeatureFFN, self).__init__()
+        
+        self.activation = activation
+        self.dropout    = nn.Dropout (drop_prob)
+        self.batchnorm0 = nn.BatchNorm1d (inputCount)
+        self.dense1     = nn.Linear (inputCount, hiddenLayerCounts[0])
+        self.batchnorm1 = nn.BatchNorm1d (hiddenLayerCounts[0])
+        self.dense2     = nn.Linear(hiddenLayerCounts[0], hiddenLayerCounts[1])
+        self.batchnorm2 = nn.BatchNorm1d (hiddenLayerCounts[1])
+        self.dense3     = nn.Linear(hiddenLayerCounts[1], hiddenLayerCounts[2])
+        self.batchnorm3 = nn.BatchNorm1d (hiddenLayerCounts[2])        
+        self.outDense   = None
+        if outputCount > 0:
+            self.outDense   = nn.Linear(hiddenLayerCounts[-1], outputCount)
+
+    def forward (self, x):
+        
+        # x = self.dropout (self.batchnorm0 (x))
+        x = self.batchnorm0(x)
+        x = self.dropout (self.activation (self.batchnorm1 (self.dense1 (x))))
+        x = self.dropout (self.activation (self.batchnorm2 (self.dense2 (x))))
+        x = self.dropout (self.activation (self.batchnorm3 (self.dense3 (x))))
+        # x = self.outDense (x)
+        return x
+# %%
+class EmbedFNN (nn.Module):
+    
+    def __init__(self, hidden_layers=hidden_units[1:], 
+                       embed_dim=len(tag_cols), 
+                       output_dim=len(target_cols),
+                       features_tag_file=features_tag_file,
+                       ):
+        
+        super(EmbedFNN, self).__init__()
+        global N_FEAT_TAGS
+        N_FEAT_TAGS = 29
+        
+        # store the features to tags mapping as a datframe tdf, feature_i mapping is in tdf[i, :]
+        dtype = {'tag_0' : 'int8'}
+        for i in range(1, 29):
+            k = f'tag_{i}'
+            dtype[k] = 'int8'
+        features_tag_matrix = pd.read_csv(features_tag_file, 
+                                          usecols=range (1,N_FEAT_TAGS+1), dtype=dtype)
+        # tag_29 is for feature_0
+        features_tag_matrix['tag_29'] = np.array ([1] + ([0]*(len(feat_cols)-1)) ).astype ('int8')
+        self.features_tag_matrix = torch.tensor(features_tag_matrix.values, dtype=torch.float32)
+        # torch.tensor(t_df.to_numpy())
+        N_FEAT_TAGS += 1
+        
+        
+        # embeddings for the tags. Each feature is taken an embedding which is an avg. of its' tag embeddings
+        self.embed_dim  = embed_dim
+        self.tag_embedding = nn.Embedding(N_FEAT_TAGS+1, embed_dim) 
+        # create a special tag if not known tag for any feature
+        self.tag_weights = nn.Linear(N_FEAT_TAGS, 1)
+        
+        drop_prob = 0.5
+        self.ffn = FeatureFFN(inputCount=len(feat_cols)+embed_dim, 
+                              outputCount=0, 
+                              hiddenLayerCounts=[(hidden_layers[0]+embed_dim), 
+                                                 (hidden_layers[1]+embed_dim), 
+                                                 (hidden_layers[2]+embed_dim)], 
+                              drop_prob=drop_prob)
+        self.outDense = nn.Linear (hidden_layers[2]+embed_dim,  output_dim)
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        return
+    
+    def features2emb (self):
+        """
+        idx : int feature index 0 to N_FEATURES-1 (129)
+        """
+        
+        all_tag_idxs = torch.LongTensor(np.arange(N_FEAT_TAGS)) # (29,)
+        tag_bools = self.features_tag_matrix.to(self.device) # (130, 29)
+        # print ('tag_bools.shape =', tag_bools.size())
+        all_tag_idxs = all_tag_idxs.to(self.device)
+        f_emb = self.tag_embedding(all_tag_idxs).repeat(len(feat_cols), 1, 1)    
+        #;print ('1. f_emb =', f_emb) # (29, 7) * (130, 1, 1) = (130, 29, 7)
+        # print ('f_emb.shape =', f_emb.size())
+        f_emb = f_emb * tag_bools[:, :, None]                           
+        #;print ('2. f_emb =', f_emb) # (130, 29, 7) * (130, 29, 1) = (130, 29, 7)
+        # print ('f_emb.shape =', f_emb.size())
+        
+        # Take avg. of all the present tag's embeddings to get the embedding for a feature
+        s = torch.sum (tag_bools, dim=1) # (130,)       
+        f_emb = torch.sum (f_emb, dim=-2) / s[:, None]
+        # (130, 7)
+        # print ('f_emb =', f_emb)        
+        # print ('f_emb.shape =', f_emb.shape)
+        
+        # take a linear combination of the present tag's embeddings
+        # f_emb = f_emb.permute (0, 2, 1) # (130, 7, 29)
+        # f_emb = self.tag_weights (f_emb)                      
+        # #;print ('3. f_emb =', f_emb)    # (130, 7, 1)
+        # f_emb = torch.squeeze (f_emb, dim=-1)                 
+        # #;print ('4. f_emb =', f_emb)   # (130, 7)
+        return f_emb.detach().to(self.device)
+    
+    def forward (self, features, cat_features=None):
+        """
+        when you call `model (x ,y, z, ...)` then this method is invoked
+        """
+        
+        # cat_features = None
+        features   = features.view (-1, len(feat_cols))
+        f_emb = self.features2emb()
+        features_2 = torch.matmul (features, f_emb)
+        
+        # Concatenate the two features (features + their embeddings)
+        features = torch.hstack ((features, features_2))       
+        
+        x = self.ffn(features)
+        out = self.outDense(x)
+        return out
+
 
 class RunningEWMean:
     def __init__(self, WIN_SIZE=20, n_size=1, lt_mean=None):
@@ -478,11 +608,14 @@ def train_epoch(model, optimizer, scheduler, loss_fn, dataloader, device):
             outputs = model(features)
             loss = loss_fn(outputs, label)
             loss.backward()
+
             optimizer.step()
             if scheduler:
                 scheduler.step()
 
             final_loss += loss.item()
+            lr = optimizer.param_groups[0]['lr']
+            pbar.set_description(f'learning rate: {lr:.5e}')
             pbar.update()
 
     final_loss /= len(dataloader)
@@ -584,6 +717,7 @@ def train_epoch_finetune(model, optimizer, scheduler, regularizer, dataloader, d
             optimizer.step()
             if scheduler:
                 scheduler.step()
+
             # with torch.no_grad():
             #     _loss = loss_fn(outputs, label)
             

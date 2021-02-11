@@ -2,11 +2,6 @@
 import os, sys
 import pandas as pd
 
-from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler
-
-
 import torch
 import torch.nn as nn
 from torchsummary import summary
@@ -23,7 +18,7 @@ from utils import *
 from utils_js import *
 #%%
 
-THREE_HIDDEN_LAYERS = [400, 400, 400]
+HIDDEN_LAYERS = [400, 400, 400] # hidden layer size for the embedding model 
 N_FEAT_TAGS = 29
 N_TARGETS = 6
 
@@ -34,8 +29,8 @@ FINETUNE_BATCH_SIZE = 51200
 EPOCHS = 100
 
 N_DENOISED_TARGET = 1
-LEARNING_RATE = 1e-3
-WEIGHT_DECAY = 1e-3
+LEARNING_RATE = 1e-4
+WEIGHT_DECAY = 1e-4
 
 N_FEATURES = 130
 N_FEAT_TAGS = 29
@@ -112,7 +107,7 @@ class FeatureFFN (nn.Module):
 # %%
 class EmbedFNN (nn.Module):
     
-    def __init__(self, three_hidden_layers=THREE_HIDDEN_LAYERS, 
+    def __init__(self, hidden_layers=HIDDEN_LAYERS, 
                        embed_dim=N_FEAT_TAGS, 
                        features_tag_matrix=features_df):
         
@@ -140,12 +135,12 @@ class EmbedFNN (nn.Module):
         
         drop_prob = 0.5
         self.ffn = FeatureFFN(inputCount=(N_FEATURES+embed_dim), 
-                             outputCount=0, 
-                             hiddenLayerCounts=[(three_hidden_layers[0]+embed_dim), 
-                                               (three_hidden_layers[1]+embed_dim), 
-                                               (three_hidden_layers[2]+embed_dim)], 
-                             drop_prob=drop_prob)
-        self.outDense = nn.Linear (three_hidden_layers[2]+embed_dim, N_TARGETS)
+                              outputCount=0, 
+                              hiddenLayerCounts=[(hidden_layers[0]+embed_dim), 
+                                               (hidden_layers[1]+embed_dim), 
+                                               (hidden_layers[2]+embed_dim)], 
+                              drop_prob=drop_prob)
+        self.outDense = nn.Linear (hidden_layers[2]+embed_dim, N_TARGETS)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         return
     
@@ -204,8 +199,6 @@ train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_wo
 valid_set = ExtendedMarketDataset(valid, features=feat_cols, targets=target_cols, resp=resp_cols)
 valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
 
-model = EmbedFNN()
-model.to(device);
 # %%
 util_cols = resp_cols
 resp_index = [resp_cols.index(r) for r in util_cols]
@@ -214,6 +207,8 @@ regularizer = UtilityLoss(alpha=5e-2, scaling=12, normalize=None, resp_index=res
 
 loss_fn = SmoothBCEwLogits(smoothing=0.005)
 
+model = EmbedFNN()
+# model.to(device);
 # optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 optimizer = RAdam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 
@@ -250,7 +245,7 @@ for epoch in range(EPOCHS):
     valid_auc, valid_score = get_valid_score(valid_pred, valid,
                                              f=median_avg, threshold=0.5, target_cols=target_cols)
     model_file = MODEL_DIR + \
-        f"/dn_ep_{epoch}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
+        f"/emb_fold_{_fold}_ep_{epoch}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
     early_stop(valid_auc, model, model_path=model_file,
                epoch_utility_score=valid_score)
     tqdm.write(f"\n[Epoch {epoch+1}/{EPOCHS}] \t Fold {_fold}")
@@ -263,3 +258,4 @@ for epoch in range(EPOCHS):
     if early_stop.early_stop:
         print("\nEarly stopping")
         break
+# %%

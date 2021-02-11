@@ -430,9 +430,9 @@ def preprocess_pt(train_file, day_start=86, day_split=450,
         train[['weight']] = train[['weight']].clip(zero_weight_thresh)
 
     # vanilla actions based on resp
-    train['action'] = (train['resp'] > 0).astype('int')
+    train['action'] = (train['resp'] > 0).astype(int)
     for c in range(1,5):
-        train['action_'+str(c)] = (train['resp_'+str(c)] > 0).astype('int')
+        train['action_'+str(c)] = (train['resp_'+str(c)] > 0).astype(int)
 
     train.fillna(train.mean(),inplace=True)
 

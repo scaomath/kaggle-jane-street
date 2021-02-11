@@ -62,10 +62,8 @@ for c in range(NUM_DENOISE):
     resp_cols += [f'resp_dn_{c}']
     target_cols += [f'action_dn_{c}']
 
-
 for c in range(1, 5):
-    print(f'action based on resp_{c} mean: ',
-          train['action_'+str(c)].astype(int).mean())
+    print(f'action based on resp_{c} mean: ', train['action_'+str(c)].astype(int).mean())
 
 feat_cols = [f'feature_{i}' for i in range(130)]
 # f_mean = np.mean(train[feat_cols[1:]].values, axis=0)
@@ -79,10 +77,7 @@ train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_wo
 valid_set = ExtendedMarketDataset(valid, features=feat_cols, targets=target_cols, resp=resp_cols)
 valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
 
-model = ResidualMLP(hidden_size=256, output_size=len(target_cols))
-# model = MLP(hidden_units=(None,160,160,160), input_dim=len(feat_cols), output_dim=len(target_cols))
-model.to(device)
-summary(model, input_size=(len(feat_cols), ))
+
 # %%
 '''
 fine-tuning the trained model based on resp or utils
@@ -110,6 +105,12 @@ loss_fn = SmoothBCEwLogits(smoothing=0.005)
 all_train = pd.concat([train, valid], axis=0)
 all_train_set = ExtendedMarketDataset(all_train, features=feat_cols, targets=target_cols, resp=resp_cols)
 train_loader = DataLoader(all_train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
+
+
+model = ResidualMLP(hidden_size=256, output_size=len(target_cols))
+# model = MLP(hidden_units=(None,160,160,160), input_dim=len(feat_cols), output_dim=len(target_cols))
+model.to(device)
+summary(model, input_size=(len(feat_cols), ))
 
 # optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 optimizer = RAdam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
@@ -150,7 +151,7 @@ if LOAD_PRETRAIN:
 
     print(f"valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
 # %%
-_fold = 7
+_fold = 10
 SEED = 802
 get_seed(SEED+SEED*_fold)
 lr = []
@@ -168,7 +169,7 @@ for epoch in range(EPOCHS):
     valid_auc, valid_score = get_valid_score(valid_pred, valid,
                                              f=median_avg, threshold=0.5, target_cols=target_cols)
     model_file = MODEL_DIR + \
-        f"/dn_ep_{epoch}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
+        f"/dn_fold_{_fold}_ep_{epoch}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
     early_stop(valid_auc, model, model_path=model_file,
                epoch_utility_score=valid_score)
     tqdm.write(f"\n[Epoch {epoch+1}/{EPOCHS}] \t Fold {_fold}")
