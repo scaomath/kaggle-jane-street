@@ -26,7 +26,7 @@ LOAD_PRETRAIN = False
 TRAINING_START = 86  # 86 by default
 FINETUNE_BATCH_SIZE = 2048_00
 BATCH_SIZE = 8196
-EPOCHS = 200
+EPOCHS = 120
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-5
 EARLYSTOP_NUM = 5
@@ -47,6 +47,7 @@ with timer("Preprocessing train"):
     train_parquet = os.path.join(DATA_DIR, 'train.parquet')
     train, valid = preprocess_pt(train_parquet, day_start=TRAINING_START, 
                                  drop_zero_weight=False, 
+                                 zero_weight_thresh=None,
                                  denoised_resp=True, 
                                  num_dn_target=NUM_DENOISE)
 
@@ -125,8 +126,7 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
 finetune_loader = DataLoader(
     train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
 
-finetune_optimizer = torch.optim.Adam(
-    model.parameters(), lr=LEARNING_RATE*1e-3)
+finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
 
 early_stop = EarlyStopping(patience=EARLYSTOP_NUM,
                            mode="max", save_threshold=5900)

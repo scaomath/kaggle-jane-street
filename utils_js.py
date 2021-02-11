@@ -413,7 +413,8 @@ def add_denoised_target(train_df, num_dn_target=1):
 
 ## preprocess for torch model
 def preprocess_pt(train_file, day_start=86, day_split=450, 
-                  drop_zero_weight=True, denoised_resp=False, num_dn_target=1):
+                  drop_zero_weight=True, zero_weight_thresh=1e-7, 
+                  denoised_resp=False, num_dn_target=1):
     try:
         train = pd.read_parquet(train_file)
     except:
@@ -425,8 +426,8 @@ def preprocess_pt(train_file, day_start=86, day_split=450,
 
     if drop_zero_weight:
         train = train[train['weight'] > 0].reset_index(drop = True)
-    else:
-        train[['weight']] = train[['weight']].clip(1e-7)
+    elif drop_zero_weight==False and zero_weight_thresh is not None:
+        train[['weight']] = train[['weight']].clip(zero_weight_thresh)
 
     # vanilla actions based on resp
     train['action'] = (train['resp'] > 0).astype('int')
