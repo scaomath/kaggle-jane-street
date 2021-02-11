@@ -29,7 +29,7 @@ BATCH_SIZE = 8196
 EPOCHS = 200
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-5
-EARLYSTOP_NUM = 6
+EARLYSTOP_NUM = 5
 SCALING = 10
 THRESHOLD = 0.5
 NUM_DENOISE = 1
@@ -46,7 +46,9 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 with timer("Preprocessing train"):
     train_parquet = os.path.join(DATA_DIR, 'train.parquet')
     train, valid = preprocess_pt(train_parquet, day_start=TRAINING_START, 
-                                 drop_zero_weight=False, denoised_resp=True, num_dn_target=NUM_DENOISE)
+                                 drop_zero_weight=False, 
+                                 denoised_resp=True, 
+                                 num_dn_target=NUM_DENOISE)
 
 resp_cols = ['resp','resp_1', 'resp_2', 'resp_3', 'resp_4']
 resp_cols_all = resp_cols
@@ -89,7 +91,7 @@ max batch_size:
 
 current best setting: 
 '''
-resp_cols = ['resp','resp_1', 'resp_2', 'resp_3', 'resp_4'] 
+resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4'] 
 for i in range(NUM_DENOISE):
     resp_cols += [f'resp_dn_{i}']
 
@@ -105,13 +107,11 @@ regularizer = UtilityLoss(alpha=1e-1, scaling=12, normalize=None, resp_index=res
 loss_fn = SmoothBCEwLogits(smoothing=0.005)
 
 all_train = pd.concat([train, valid], axis=0)
-all_train_set = ExtendedMarketDataset(
-    all_train, features=feat_cols, targets=target_cols, resp=resp_cols)
+all_train_set = ExtendedMarketDataset(all_train, features=feat_cols, targets=target_cols, resp=resp_cols)
 train_loader = DataLoader(all_train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-# optimizer = RAdam(model.parameters(), lr=LEARNING_RATE,
-#                   weight_decay=WEIGHT_DECAY)
+# optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+optimizer = RAdam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 # optimizer = Lookahead(optimizer=optimizer, alpha=1e-1)
 # scheduler = None
 

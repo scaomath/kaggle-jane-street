@@ -426,7 +426,7 @@ def preprocess_pt(train_file, day_start=86, day_split=450,
     if drop_zero_weight:
         train = train[train['weight'] > 0].reset_index(drop = True)
     else:
-        train[['weight']] = train[['weight']].clip(1e-5)
+        train[['weight']] = train[['weight']].clip(1e-7)
 
     # vanilla actions based on resp
     train['action'] = (train['resp'] > 0).astype('int')

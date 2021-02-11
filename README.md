@@ -54,6 +54,7 @@ Current NN models use `date>85` and `weight>0`.
 - Set up the baseline training, adding a 16-target model (using various sums between the `resp` columns).
 - Tested the sensitivity of seeds to the CV vs public leaderboard. Bigger model in general is less sensitive than smaller models (esp the seed 1111 overfit model).
 - A local-public LB stable training strategy: RAdam/Adam with cosine annealing scheduler, utility function regularizer finetuning every 10 epochs with a `1e-3*lr` learning rate, 1 or 2 denoised targets added, 50% median average ensembling. 
+- Feature neutralization might not fit the iteration speed needed for the inference.
 
 # Gradient boosting models
 ## XGBoost:
