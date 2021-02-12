@@ -48,7 +48,7 @@ with timer("Preprocessing train"):
     train, valid = preprocess_pt(train_parquet, day_start=TRAINING_START, 
                                  drop_zero_weight=False, denoised_resp=False)
 
-print(f'action based on resp mean:   ', train['action_0'].astype(int).mean())
+print(f'action based on resp mean:   ', train['action'].astype(int).mean())
 for c in range(1, 5):
     print(f'action based on resp_{c} mean: ',
           train['action_'+str(c)].astype(int).mean())
@@ -169,9 +169,12 @@ for epoch in range(EPOCHS):
 
 if DEBUG:
     torch.save(model.state_dict(), MODEL_DIR + f"/resmlp_interleave_fold_{_fold}.pth")
-
 # %%
-model_file = f"resmlp_interleave_0_util_7437_auc_0.6389.pth"
+_fold = 1
+# model_file = f"resmlp_interleave_0_util_7437_auc_0.6389.pth"
+# model_file = f"resmlp_ft_old_fold_{_fold}.pth" # fold 1, 3, 4 good
+model_file = f"resmlp_finetune_fold_{_fold}.pth"
+# model_file = f"resmlp_{_fold}.pth"
 print(f"Loading {model_file} for cv check.")
 model_weights = os.path.join(MODEL_DIR, model_file)
 
@@ -180,11 +183,11 @@ try:
 except:
     model.load_state_dict(torch.load(
         model_weights, map_location=torch.device('cpu')))
-model.eval()
+model.eval();
 
-# %%
 CV_START_DAY = 100
-CV_DAYS = 25
+CV_DAYS = 50
+all_score = 0
 for _day in range(CV_START_DAY, 500, CV_DAYS):
     _valid = all_train[all_train.date.isin(range(_day, _day+CV_DAYS))]
     _valid = _valid[_valid.weight > 0]
@@ -197,4 +200,6 @@ for _day in range(CV_START_DAY, 500, CV_DAYS):
         valid_pred, _valid, f=median_avg, threshold=0.5, target_cols=target_cols)
     print(
         f"Day {_day}-{_day+CV_DAYS-1}: valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
+    all_score += valid_score
+print(f"all train utility score: {all_score:.2f} ")
 # %%

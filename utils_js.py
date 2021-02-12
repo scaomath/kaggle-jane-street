@@ -533,11 +533,13 @@ def median_avg(predictions, beta=0.5, axis=-1, debug=False):
     n_model = sorted_predictions.shape[-1]
     mid_point = n_model//2+1
     n_avg = int(n_model*beta)
+    to_avg = sorted_predictions.take(range(mid_point-n_avg//2-1,mid_point+n_avg//2), axis=axis)
+
     if debug:
         print('sorted_list',sorted_predictions)
         print('after_cut',sorted_predictions[..., mid_point-n_avg//2-1:mid_point+n_avg//2])
-    to_avg = sorted_predictions[..., mid_point-n_avg//2-1:mid_point+n_avg//2]
-    return np.mean(to_avg, axis=axis)
+
+    return to_avg.mean(axis=axis)
 
 if __name__ == "__main__":
     HOME = os.path.dirname(os.path.abspath(__file__))

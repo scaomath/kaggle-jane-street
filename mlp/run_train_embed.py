@@ -32,7 +32,7 @@ BATCH_SIZE = 8196
 
 FINETUNE_BATCH_SIZE = 204_800
 
-EPOCHS = 100
+EPOCHS = 50
 EARLYSTOP_NUM = 6
 
 LEARNING_RATE = 1e-3
@@ -84,7 +84,7 @@ summary(model, input_size=(len(feat_cols), ))
 util_cols = resp_cols
 resp_index = [resp_cols.index(r) for r in util_cols]
 
-regularizer = UtilityLoss(alpha=5e-2, scaling=12, normalize=None, resp_index=resp_index)
+regularizer = UtilityLoss(alpha=1e-1, scaling=12, normalize=None, resp_index=resp_index)
 
 loss_fn = SmoothBCEwLogits(smoothing=0.005)
 

@@ -770,6 +770,7 @@ def print_all_valid_score(df, model, start_day=100, num_days=50,
                           feat_cols=feat_cols,
                           resp_cols=resp_cols):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    all_score = 0
     for _day in range(start_day, 500, num_days):
         _valid = df[df.date.isin(range(_day, _day+num_days))]
         _valid = _valid[_valid.weight > 0]
@@ -779,6 +780,8 @@ def print_all_valid_score(df, model, start_day=100, num_days=50,
         valid_auc, valid_score = get_valid_score(valid_pred, _valid, f=f, threshold=threshold, target_cols=target_cols)
         print(
             f"Day {_day}-{_day+num_days-1}: valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
+        all_score += valid_score
+    print(f"Day {start_day}-{500} utility score: {all_score:.2f} ")
             
 #%%
 if __name__ == '__main__':
