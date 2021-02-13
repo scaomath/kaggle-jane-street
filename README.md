@@ -1,10 +1,14 @@
 # Playground for Jane Street Market Prediction Competition on Kaggle
 
+# Team: Semper Augustus
+Shuhao Cao, Carl McBride Ellis, Ethan Zheng
+
+
 # TO-DO for final submission:
-- [x] EDA
-- [x] A simple starter
-- [x] Stable CV-LB strategy (Update Jan 22, now I think this is somehow impossible)
-- [x] Writing a simple `iter_env` simulator
+- [x] EDA.
+- [x] A simple starter.
+- [x] Stable CV-LB strategy (Updated Jan 22, now I think this is somehow impossible; updated Feb 12, certain correlation between the LB and the denoised target utility-finetuning around 70 epochs of ADAM).
+- [x] Writing a simple `iter_env` simulator.
 - [ ] Testing a moving average `fillna()` strategy in both train and inference pipeline.
 - [ ] Testing a past mean `fillna()`, fill the NaN using the mean only from prior day data, no intraday data.
 - [x] Using the `iter_env` simulator to test the impact of different threshold: 0.502 or 0.498 can be both better than 0.5? Need an explanation...
@@ -13,9 +17,10 @@
 - [ ] Using `feature_0` to choose models.
 - [ ] Using rolling mean of previous days as input, working out a submission pipeline.
 - [x] Implement a regularizer using the utility function.
-- [x] Train with all weights (maybe making `weight==0` rows' weights to certain small number `1e-5`), then train with all positive `weight` rows.
+- [x] Train with all weights (maybe making `weight==0` rows' weights to certain small number `1e-5`), then train with all positive `weight` rows (slightly better public leaderboard).
 - [x] Train with a weighted cross entropy loss, the weight is $\ln(1+w)$; the local CV became better but public leaderboard became worse. 
 - [x] Adding one or multiple denoised targets by removing the eigenvalues of the covariance matrix.
+- [ ] Train a model including the first 85 days (high volatility days).
 
 # Ideas and notes
 - Final sub: 1 with best public LB+CV, 1 experimental.
