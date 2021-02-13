@@ -384,6 +384,9 @@ class RAdam(Optimizer):
         return loss
 
 
+
+
+
 def preprocess_base(df, drop_weight=True):
     '''
     Only use day > 85 data
@@ -540,6 +543,112 @@ def median_avg(predictions, beta=0.5, axis=-1, debug=False):
         print('after_cut',sorted_predictions[..., mid_point-n_avg//2-1:mid_point+n_avg//2])
 
     return to_avg.mean(axis=axis)
+
+
+class RunningPDA:
+    '''
+    Past day mean
+    Reference: Lucas Morin
+    https://www.kaggle.com/lucasmorin/running-algos-fe-for-fast-inference?scriptVersionId=50754012
+    '''
+    def __init__(self):
+        self.day = -1
+        self.past_mean = 0
+        self.cum_sum = 0
+        self.day_instances = 0
+        self.past_value = 0
+
+    def clear(self):
+        self.n = 0
+        self.windows.clear()
+
+    def push(self, x, date):
+        
+        x = fast_fillna(x, self.past_value)
+        self.past_value = x
+        
+        # change of day
+        if date>self.day:
+            self.day = date
+            if self.day_instances > 0:
+                self.past_mean = self.cum_sum/self.day_instances
+            else:
+                self.past_mean = 0
+            self.day_instances = 1
+            self.cum_sum = x
+            
+        else:
+            self.day_instances += 1
+            self.cum_sum += x
+
+    def get_mean(self):
+        return self.cum_sum/self.day_instances
+
+    def get_past_mean(self):
+        return self.past_mean
+
+
+#Designed to do all features at the same time, but Kaggle kernels are memory limited.
+class NeutralizeTransform:
+    '''
+    Unfortunately too slow for submission API
+    Reference: https://www.kaggle.com/snippsy/jane-street-densenet-neutralizing-features
+    '''
+    def __init__(self,proportion=1.0):
+        self.proportion = proportion
+    
+    def fit(self,X,y):
+        self.lms = []
+        self.mean_exposure = np.mean(y,axis=0)
+        self.y_shape = y.shape[-1]
+        for x in X.T:
+            scores = x.reshape((-1,1))
+            exposures = y
+            exposures = np.hstack((exposures, np.array([np.mean(scores)] * len(exposures)).reshape(-1, 1)))
+            
+            transform = np.linalg.lstsq(exposures, scores, rcond=None)[0]
+            self.lms.append(transform)
+            
+    def transform(self,X,y=None):
+        out = []
+        for i,transform in enumerate(self.lms):
+            x = X[:,i]
+            scores = x.reshape((-1,1))
+            exposures = np.repeat(self.mean_exposure,len(x),axis=0).reshape((-1,self.y_shape))
+            exposures = np.concatenate([exposures,np.array([np.mean(scores)] * len(exposures)).reshape((-1,1))],axis=1)
+            correction = self.proportion * exposures.dot(transform)
+            out.append(x - correction.ravel())
+            
+        return np.asarray(out).T
+    
+    def fit_transform(self,X,y):
+        self.fit(X,y)
+        return self.transform(X,y)
+
+
+class RunningEWMean:
+    '''
+    Reference: Lucas Morin
+    https://www.kaggle.com/lucasmorin/running-algos-fe-for-fast-inference?scriptVersionId=50754012
+    '''
+    def __init__(self, WIN_SIZE=20, n_size=1, lt_mean=None):
+        if lt_mean is not None:
+            self.s = lt_mean
+        else:
+            self.s = np.zeros(n_size)
+        self.past_value = np.zeros(n_size)
+        self.alpha = 2 / (WIN_SIZE + 1)
+
+    def clear(self):
+        self.s = 0
+
+    def push(self, x):
+        x = fast_fillna(x, self.past_value)
+        self.past_value = x
+        self.s = self.alpha * x + (1 - self.alpha) * self.s
+
+    def get_mean(self):
+        return self.s
 
 if __name__ == "__main__":
     HOME = os.path.dirname(os.path.abspath(__file__))

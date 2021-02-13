@@ -24,12 +24,14 @@ Training script finetuning using resp colums as regularizer with an additional d
 DEBUG = False
 LOAD_PRETRAIN = False
 TRAINING_START = 86  # 86 by default
+
 FINETUNE_BATCH_SIZE = 2048_00
 BATCH_SIZE = 8196
 EPOCHS = 120
+EARLYSTOP_NUM = 6
+
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-5
-EARLYSTOP_NUM = 5
 SCALING = 10
 THRESHOLD = 0.5
 NUM_DENOISE = 1
@@ -112,8 +114,8 @@ model = ResidualMLP(hidden_size=256, output_size=len(target_cols))
 model.to(device)
 summary(model, input_size=(len(feat_cols), ))
 
-# optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-optimizer = RAdam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+# optimizer = RAdam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 # optimizer = Lookahead(optimizer=optimizer, alpha=1e-1)
 # scheduler = None
 
@@ -124,8 +126,7 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
                                                                  T_0=10, T_mult=1, 
                                                                  eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
 
-finetune_loader = DataLoader(
-    train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
+finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
 
 finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
 
@@ -151,7 +152,7 @@ if LOAD_PRETRAIN:
 
     print(f"valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
 # %%
-_fold = 10
+_fold = 7
 SEED = 802
 get_seed(SEED+SEED*_fold)
 lr = []

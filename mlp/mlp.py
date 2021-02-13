@@ -306,27 +306,6 @@ class EmbedFNN (nn.Module):
         out = self.outDense(x)
         return out
 
-
-class RunningEWMean:
-    def __init__(self, WIN_SIZE=20, n_size=1, lt_mean=None):
-        if lt_mean is not None:
-            self.s = lt_mean
-        else:
-            self.s = np.zeros(n_size)
-        self.past_value = np.zeros(n_size)
-        self.alpha = 2 / (WIN_SIZE + 1)
-
-    def clear(self):
-        self.s = 0
-
-    def push(self, x):
-        x = fast_fillna(x, self.past_value)
-        self.past_value = x
-        self.s = self.alpha * x + (1 - self.alpha) * self.s
-
-    def get_mean(self):
-        return self.s
-
 class MarketDataset:
     def __init__(self, df, 
                        features=all_feat_cols, 
@@ -493,39 +472,6 @@ class UtilityLoss(nn.Module):
             loss = -self.alpha*sumPi*(sumPi.clamp(min=0))/ndays
 
         return loss
-
-#Designed to do all features at the same time, but Kaggle kernels are memory limited.
-class NeutralizeTransform:
-    def __init__(self,proportion=1.0):
-        self.proportion = proportion
-    
-    def fit(self,X,y):
-        self.lms = []
-        self.mean_exposure = np.mean(y,axis=0)
-        self.y_shape = y.shape[-1]
-        for x in X.T:
-            scores = x.reshape((-1,1))
-            exposures = y
-            exposures = np.hstack((exposures, np.array([np.mean(scores)] * len(exposures)).reshape(-1, 1)))
-            
-            transform = np.linalg.lstsq(exposures, scores, rcond=None)[0]
-            self.lms.append(transform)
-            
-    def transform(self,X,y=None):
-        out = []
-        for i,transform in enumerate(self.lms):
-            x = X[:,i]
-            scores = x.reshape((-1,1))
-            exposures = np.repeat(self.mean_exposure,len(x),axis=0).reshape((-1,self.y_shape))
-            exposures = np.concatenate([exposures,np.array([np.mean(scores)] * len(exposures)).reshape((-1,1))],axis=1)
-            correction = self.proportion * exposures.dot(transform)
-            out.append(x - correction.ravel())
-            
-        return np.asarray(out).T
-    
-    def fit_transform(self,X,y):
-        self.fit(X,y)
-        return self.transform(X,y)
 
 class EarlyStopping:
     def __init__(self, patience=7, mode="max", delta=0.0, monitor='utility', save_threshold=5000):
