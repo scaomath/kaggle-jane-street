@@ -12,9 +12,9 @@ Shuhao Cao, Carl McBride Ellis, Ethan Zheng
 - [ ] Testing a moving average `fillna()` strategy in both train and inference pipeline.
 - [ ] Testing a past mean `fillna()`, fill the NaN using the mean only from prior day data, no intraday data.
 - [x] Using the `iter_env` simulator to test the impact of different threshold: 0.502 or 0.498 can be both better than 0.5? Need an explanation...
-- [ ] A table compiling what features will be using `ffill`, previous day mean, overall mean, etc.
+- [ ] A table compiling what features will be using `ffill`, previous day mean, overall mean, etc (maybe not necessary?).
 - [ ] Trading frequency can be determined by number of trades per day, store this in a cache to choose model.
-- [ ] Using `feature_0` to choose models.
+- [ ] Using `feature_0` to choose models, and/or threshold (based on `feature_0`'s previous day count).
 - [ ] Using rolling mean of previous days as input, working out a submission pipeline.
 - [x] Implement a regularizer using the utility function.
 - [x] Train with all weights (maybe making `weight==0` rows' weights to certain small number `1e-5`), then train with all positive `weight` rows (slightly better public leaderboard).
