@@ -60,15 +60,17 @@ feat_cols = [f'feature_{i}' for i in range(130)]
 # f_mean = np.mean(train[feat_cols[1:]].values, axis=0)
 feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
 
+# adding weight to the features
+feat_cols.extend(['weight'])
+
 # %%
-train_set = ExtendedMarketDataset(
-    train, features=feat_cols, targets=target_cols, resp=resp_cols)
+train_set = ExtendedMarketDataset(train, features=feat_cols, targets=target_cols, resp=resp_cols)
 train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
 
 valid_set = ExtendedMarketDataset(valid, features=feat_cols, targets=target_cols, resp=resp_cols)
 valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
 
-model = ResidualMLP(hidden_size=256, output_size=len(target_cols))
+model = ResidualMLP(input_size=len(feat_cols), hidden_size=256, output_size=len(target_cols))
 # model = MLP(hidden_units=(None,160,160,160), input_dim=len(feat_cols), output_dim=len(target_cols))
 model.to(device)
 summary(model, input_size=(len(feat_cols), ))
@@ -101,7 +103,6 @@ train_loader = DataLoader(all_train_set, batch_size=BATCH_SIZE, shuffle=True, nu
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 # optimizer = RAdam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 # optimizer = Lookahead(optimizer=optimizer, alpha=1e-1)
-# scheduler = None
 
 # scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE,
 #                                                     steps_per_epoch=len(train_loader),
@@ -142,8 +143,8 @@ get_seed(SEED+SEED*_fold)
 
 for epoch in range(EPOCHS):
 
-    # train_loss = train_epoch(model, optimizer, scheduler,loss_fn, train_loader, device)
-    train_loss = train_epoch_weighted(model, optimizer, scheduler, loss_fn, train_loader, device)
+    train_loss = train_epoch(model, optimizer, scheduler,loss_fn, train_loader, device)
+    # train_loss = train_epoch_weighted(model, optimizer, scheduler, loss_fn, train_loader, device)
     lr = optimizer.param_groups[0]['lr']
     if (epoch+1) % 10 == 0:
         _ = train_epoch_finetune(model, finetune_optimizer, scheduler,
@@ -152,8 +153,10 @@ for epoch in range(EPOCHS):
     valid_pred = valid_epoch(model, valid_loader, device)
     valid_auc, valid_score = get_valid_score(valid_pred, valid,
                                              f=median_avg, threshold=0.5, target_cols=target_cols)
+    # model_file = MODEL_DIR + \
+    #     f"/resmlp_interleave_{_fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
     model_file = MODEL_DIR + \
-        f"/resmlp_interleave_{_fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
+        f"/resw_interleave_{_fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
     early_stop(valid_auc, model, model_path=model_file,
                epoch_utility_score=valid_score)
     tqdm.write(f"\n[Epoch {epoch+1}/{EPOCHS}] \t Fold {_fold}")
@@ -173,7 +176,8 @@ if DEBUG:
 _fold = 1
 # model_file = f"resmlp_interleave_0_util_7437_auc_0.6389.pth"
 # model_file = f"resmlp_ft_old_fold_{_fold}.pth" # fold 1, 3, 4 good
-model_file = f"resmlp_finetune_fold_{_fold}.pth"
+# model_file = f"resmlp_finetune_fold_{_fold}.pth"
+model_file = f"resw_interleave_1_util_6455_auc_0.6237.pth"
 # model_file = f"resmlp_{_fold}.pth"
 print(f"Loading {model_file} for cv check.")
 model_weights = os.path.join(MODEL_DIR, model_file)
@@ -185,21 +189,15 @@ except:
         model_weights, map_location=torch.device('cpu')))
 model.eval();
 
-CV_START_DAY = 100
-CV_DAYS = 50
-all_score = 0
-for _day in range(CV_START_DAY, 500, CV_DAYS):
-    _valid = all_train[all_train.date.isin(range(_day, _day+CV_DAYS))]
-    _valid = _valid[_valid.weight > 0]
-    valid_set = ExtendedMarketDataset(
-        _valid, features=feat_cols, targets=target_cols, resp=resp_cols)
-    valid_loader = DataLoader(
-        valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8, drop_last=False)
-    valid_pred = valid_epoch(model, valid_loader, device)
-    valid_auc, valid_score = get_valid_score(
-        valid_pred, _valid, f=median_avg, threshold=0.5, target_cols=target_cols)
-    print(
-        f"Day {_day}-{_day+CV_DAYS-1}: valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
-    all_score += valid_score
-print(f"all train utility score: {all_score:.2f} ")
+train_parquet = os.path.join(DATA_DIR, 'train.parquet')
+train = preprocess_pt(train_parquet, day_start=0, day_split=None, 
+                  drop_zero_weight=False)
+
+CV_START_DAY = 0
+CV_DAYS = 25
+print_all_valid_score(train, model, start_day=CV_START_DAY, num_days=CV_DAYS, 
+                        batch_size =2*8192, f=median_avg, threshold=0.5, 
+                        target_cols=target_cols, 
+                        feat_cols=feat_cols,
+                        resp_cols=resp_cols)
 # %%

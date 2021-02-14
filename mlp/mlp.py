@@ -48,7 +48,7 @@ features_tag_file = os.path.join(DATA_DIR, 'features.csv')
 all_feat_cols = [col for col in feat_cols]
 all_feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
 
-val_util_thresh = 5000
+val_util_thresh = 6000
 
 ##### Model&Data fnc
 class ResidualMLP(nn.Module):
@@ -60,11 +60,11 @@ class ResidualMLP(nn.Module):
         self.batch_norm0 = nn.BatchNorm1d(input_size)
         self.dropout0 = nn.Dropout(0.2)
 
-        self.dense1 = nn.Linear(len(all_feat_cols), hidden_size)
+        self.dense1 = nn.Linear(input_size, hidden_size)
         self.batch_norm1 = nn.BatchNorm1d(hidden_size)
         self.dropout1 = nn.Dropout(dropout_rate)
 
-        self.dense2 = nn.Linear(hidden_size+len(all_feat_cols), hidden_size)
+        self.dense2 = nn.Linear(hidden_size+input_size, hidden_size)
         self.batch_norm2 = nn.BatchNorm1d(hidden_size)
         self.dropout2 = nn.Dropout(dropout_rate)
 
@@ -78,11 +78,11 @@ class ResidualMLP(nn.Module):
 
         self.dense5 = nn.Linear(hidden_size+hidden_size, output_size)
 
-        self.Relu = nn.ReLU(inplace=True)
-        self.PReLU = nn.PReLU()
+        # self.Relu = nn.ReLU(inplace=True)
+        # self.PReLU = nn.PReLU()
         self.LeakyReLU = nn.LeakyReLU(negative_slope=0.01, inplace=True)
         # self.GeLU = nn.GELU()
-        self.RReLU = nn.RReLU()
+        # self.RReLU = nn.RReLU()
 
     def forward(self, x):
         x = self.batch_norm0(x)
@@ -715,8 +715,16 @@ def print_all_valid_score(df, model, start_day=100, num_days=50,
                           target_cols=target_cols,
                           feat_cols=feat_cols,
                           resp_cols=resp_cols):
+
+    '''
+    print
+    1. util score for a span of num_days
+    2. average util score
+    2. the variance of the utils score
+
+    '''
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    all_score = 0
+    all_score = []
     for _day in range(start_day, 500, num_days):
         _valid = df[df.date.isin(range(_day, _day+num_days))]
         _valid = _valid[_valid.weight > 0]
@@ -725,9 +733,12 @@ def print_all_valid_score(df, model, start_day=100, num_days=50,
         valid_pred = valid_epoch(model, valid_loader, device)
         valid_auc, valid_score = get_valid_score(valid_pred, _valid, f=f, threshold=threshold, target_cols=target_cols)
         print(
-            f"Day {_day}-{_day+num_days-1}: valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
-        all_score += valid_score
-    print(f"Day {start_day}-{500} utility score: {all_score:.2f} ")
+            f"Day {_day:3d}-{_day+num_days-1:3d}: valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
+        all_score.append(valid_score)
+    print(f"\n\nDay {start_day}-{500}" )
+    print(f"Utility score: {sum(all_score):.2f} ")
+    print(f"Utility score mean with {num_days} span: {np.mean(all_score):.2f} ")
+    print(f"Utility score std with {num_days} span: {np.std(all_score):.2f} ")
             
 #%%
 if __name__ == '__main__':

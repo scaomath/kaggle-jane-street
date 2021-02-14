@@ -438,16 +438,16 @@ def preprocess_pt(train_file, day_start=86, day_split=450,
         train['action_'+str(c)] = (train['resp_'+str(c)] > 0).astype(int)
 
     train.fillna(train.mean(),inplace=True)
-
-    valid = train.loc[train.date >= day_split].reset_index(drop=True)
-    train = train.loc[train.date < day_split].reset_index(drop=True)
-
+    
     train['cross_41_42_43'] = train['feature_41'] + train['feature_42'] + train['feature_43']
     train['cross_1_2'] = train['feature_1'] / (train['feature_2'] + 1e-5)
-    valid['cross_41_42_43'] = valid['feature_41'] + valid['feature_42'] + valid['feature_43']
-    valid['cross_1_2'] = valid['feature_1'] / (valid['feature_2'] + 1e-5)
 
-    return train, valid
+    if day_split is not None:
+        valid = train.loc[train.date >= day_split].reset_index(drop=True)
+        train = train.loc[train.date < day_split].reset_index(drop=True)
+        return train, valid
+    else:
+        return train
 
 '''
 Simulate the inference env of Kaggle
@@ -527,7 +527,7 @@ def fast_fillna(array, values):
     return array
 
 
-def median_avg(predictions, beta=0.5, axis=-1, debug=False):
+def median_avg(predictions, beta=0.7, axis=-1, debug=False):
     '''
     predictions should be of a vector shape (..., n_models)
     beta: if beta is 0.5, then the middle 50% will be averaged
