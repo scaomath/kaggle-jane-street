@@ -1,10 +1,13 @@
 # Playground for Jane Street Market Prediction Competition on Kaggle
 
 # Team: Semper Augustus
-Shuhao Cao, Carl McBride Ellis, Ethan Zheng
+[Shuhao Cao](https://scaomath.github.io), [Carl McBride Ellis](http://www.sklogwiki.org/SklogWiki/carlmcbride.html), [Ethan Zheng](https://www.tzheng.org)
+
+# Final submission
 
 
-# TO-DO for final submission:
+
+# Things to try for the final submission:
 - [x] EDA.
 - [x] A simple starter.
 - [x] Stable CV-LB strategy (Updated Jan 22, now I think this is somehow impossible; updated Feb 12, certain correlation between the LB and the denoised target utility-finetuning around 70 epochs of ADAM).
@@ -15,12 +18,12 @@ Shuhao Cao, Carl McBride Ellis, Ethan Zheng
 - [ ] A table compiling what features will be using `ffill`, previous day mean, overall mean, etc (maybe not necessary?).
 - [ ] Trading frequency can be determined by number of trades per day, store this in a cache to choose model.
 - [ ] Using `feature_0` to choose models, and/or threshold (based on `feature_0`'s previous day count).
-- [ ] Using rolling mean of previous days as input, working out a submission pipeline.
+- [ ] Using rolling mean/exponential weighted mean of previous days as input/fillna, working out a submission pipeline.
 - [x] Implement a regularizer using the utility function.
 - [x] Train with all weights (maybe making `weight==0` rows' weights to certain small number `1e-5`), then train with all positive `weight` rows (slightly better public leaderboard).
 - [x] Train with a weighted cross entropy loss, the weight is $\ln(1+w)$; the local CV became better but public leaderboard became worse. 
-- [x] Adding one or multiple denoised targets by removing the eigenvalues of the covariance matrix.
-- [ ] Train a model including the first 85 days (high volatility days).
+- [x] Adding one or multiple de-noised targets by removing the eigenvalues of the covariance matrix.
+- [ ] Train a model including the first 85 days but excluding outlier days (high volatility days).
 - [ ] Use public LB to do a variance test to determine whether the seed 1111 overfitting model can be used to do final submission. 
 
 # Ideas and notes
@@ -36,6 +39,7 @@ Shuhao Cao, Carl McBride Ellis, Ethan Zheng
 
 # EDA
 - Only 35%-40% of the samples have `action` being 1, depending on the CV split.
+- Carl's observation: huge spike in the histogram of features 3,4,6,19,20,22,38 etc, also lurking on the far left side of features 71, 85, 87, 92, 97, 105, 127 and 129. A smaller spike is seen for feature 116.
 
 # NN models
 Current NN models use `date>85` and `weight>0`.

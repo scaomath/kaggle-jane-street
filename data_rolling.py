@@ -14,16 +14,15 @@ from utils_js import *
 get_system()
 # %%
 '''
-Using the past day mean as fillna
+Using the past day mean as fillna, for certain features use EWM
 
-Reference:
+Past day mean
+Reference: Lucas Morin's notebook
 https://www.kaggle.com/lucasmorin/running-algos-fe-for-fast-inference?scriptVersionId=50754012
 '''
 
 class RunningPDA:
     '''
-    Past day mean
-    Reference: Lucas Morin
     https://www.kaggle.com/lucasmorin/running-algos-fe-for-fast-inference?scriptVersionId=50754012
     '''
     def __init__(self):
@@ -62,6 +61,24 @@ class RunningPDA:
     def get_past_mean(self):
         return self.past_mean
 
+class RunningEWMean:
+    def __init__(self, WIN_SIZE=20, n_size = 1):
+        self.s = np.zeros(n_size)
+        self.past_value = 0
+        self.alpha = 2 /(WIN_SIZE + 1)
+
+    def clear(self):
+        self.s = 0
+
+    def push(self, x):
+        
+        x = fast_fillna(x, self.past_value)
+        self.past_value = x
+        self.s = self.alpha * x + (1 - self.alpha) * self.s
+        
+    def get_mean(self):
+        return self.s
+
 #%%
 def load_train():
     with timer("Loading train parquet"):
@@ -74,7 +91,7 @@ train = load_train()
 
 #%%
 
-TRAIN_ROWS = 500_000
+TRAIN_ROWS = 50_000
 
 train = train[:TRAIN_ROWS]
 train_past_day_mean = [] 
