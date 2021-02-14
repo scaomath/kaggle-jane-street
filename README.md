@@ -21,6 +21,7 @@ Shuhao Cao, Carl McBride Ellis, Ethan Zheng
 - [x] Train with a weighted cross entropy loss, the weight is $\ln(1+w)$; the local CV became better but public leaderboard became worse. 
 - [x] Adding one or multiple denoised targets by removing the eigenvalues of the covariance matrix.
 - [ ] Train a model including the first 85 days (high volatility days).
+- [ ] Use public LB to do a variance test to determine whether the seed 1111 overfitting model can be used to do final submission. 
 
 # Ideas and notes
 - Final sub: 1 with best public LB+CV, 1 experimental.
