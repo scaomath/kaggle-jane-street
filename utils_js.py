@@ -415,7 +415,8 @@ def add_denoised_target(train_df, num_dn_target=1):
     return train_df
 
 ## preprocess for torch model
-def preprocess_pt(train_file, day_start=86, day_split=450, 
+def preprocess_pt(train_file, day_start=86, 
+                  day_split=450, drop_days=None,
                   drop_zero_weight=True, zero_weight_thresh=1e-7, 
                   denoised_resp=False, num_dn_target=1):
     try:
@@ -423,6 +424,9 @@ def preprocess_pt(train_file, day_start=86, day_split=450,
     except:
         train = pd.read_feather(train_file)
     train = train.loc[train.date >= day_start].reset_index(drop=True)
+
+    if drop_days:
+        train = train.query(f'date not in {drop_days}').reset_index(drop = True)
     
     if denoised_resp:
         train = add_denoised_target(train, num_dn_target=num_dn_target)
@@ -444,7 +448,7 @@ def preprocess_pt(train_file, day_start=86, day_split=450,
 
     if day_split is not None:
         valid = train.loc[train.date >= day_split].reset_index(drop=True)
-        train = train.loc[train.date < day_split].reset_index(drop=True)
+        # train = train.loc[train.date < day_split].reset_index(drop=True)
         return train, valid
     else:
         return train
@@ -625,28 +629,25 @@ class NeutralizeTransform:
         self.fit(X,y)
         return self.transform(X,y)
 
-
 class RunningEWMean:
     '''
     Reference: Lucas Morin
     https://www.kaggle.com/lucasmorin/running-algos-fe-for-fast-inference?scriptVersionId=50754012
     '''
-    def __init__(self, WIN_SIZE=20, n_size=1, lt_mean=None):
-        if lt_mean is not None:
-            self.s = lt_mean
-        else:
-            self.s = np.zeros(n_size)
-        self.past_value = np.zeros(n_size)
-        self.alpha = 2 / (WIN_SIZE + 1)
+    def __init__(self, window=20, n_size = 1):
+        self.s = np.zeros(n_size)
+        self.past_value = 0
+        self.alpha = 2 /(window + 1)
 
     def clear(self):
         self.s = 0
 
     def push(self, x):
+        
         x = fast_fillna(x, self.past_value)
         self.past_value = x
         self.s = self.alpha * x + (1 - self.alpha) * self.s
-
+        
     def get_mean(self):
         return self.s
 

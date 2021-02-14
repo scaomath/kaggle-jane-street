@@ -78,11 +78,11 @@ class ResidualMLP(nn.Module):
 
         self.dense5 = nn.Linear(hidden_size+hidden_size, output_size)
 
-        # self.Relu = nn.ReLU(inplace=True)
-        # self.PReLU = nn.PReLU()
+        self.Relu = nn.ReLU(inplace=True)
+        self.PReLU = nn.PReLU()
         self.LeakyReLU = nn.LeakyReLU(negative_slope=0.01, inplace=True)
         # self.GeLU = nn.GELU()
-        # self.RReLU = nn.RReLU()
+        self.RReLU = nn.RReLU()
 
     def forward(self, x):
         x = self.batch_norm0(x)
@@ -735,7 +735,7 @@ def print_all_valid_score(df, model, start_day=100, num_days=50,
         print(
             f"Day {_day:3d}-{_day+num_days-1:3d}: valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
         all_score.append(valid_score)
-    print(f"\n\nDay {start_day}-{500}" )
+    print(f"\nDay {start_day}-{500}" )
     print(f"Utility score: {sum(all_score):.2f} ")
     print(f"Utility score mean with {num_days} span: {np.mean(all_score):.2f} ")
     print(f"Utility score std with {num_days} span: {np.std(all_score):.2f} ")
