@@ -15,7 +15,7 @@ get_system()
 # %%
 '''
 data preparation for the final submission
-1. Drop outliers (2, 294), low volume days (36, 270).
+1. Drop outliers [2, 294], low volume days [36, 270].
 
 
 Reference: Carl McBride Ellis

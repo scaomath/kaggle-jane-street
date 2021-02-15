@@ -46,14 +46,15 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # %%
 with timer("Preprocessing train"):
-    train_parquet = os.path.join(DATA_DIR, 'train.parquet')
+    # train_parquet = os.path.join(DATA_DIR, 'train.parquet')
+    train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
     train, valid = preprocess_pt(train_parquet, day_start=TRAINING_START, 
                                  drop_zero_weight=False, 
                                  zero_weight_thresh=None,
                                  denoised_resp=True, 
                                  num_dn_target=NUM_DENOISE)
 
-resp_cols = ['resp','resp_1', 'resp_2', 'resp_3', 'resp_4']
+resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 resp_cols_all = resp_cols
 target_cols = ['action','action_1', 'action_2', 'action_3', 'action_4']
 

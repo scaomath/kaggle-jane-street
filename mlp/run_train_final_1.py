@@ -30,7 +30,7 @@ BATCH_SIZE = 8196
 EPOCHS = 120
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-5
-EARLYSTOP_NUM = 5
+EARLYSTOP_NUM = 10
 NFOLDS = 1
 SCALING = 12
 THRESHOLD = 0.5
@@ -44,9 +44,9 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # %%
 with timer("Preprocessing train"):
-    train_parquet = os.path.join(DATA_DIR, 'train.parquet')
+    train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
     train, valid = preprocess_pt(train_parquet, day_start=TRAINING_START, day_split=450,
-                                 drop_days = DAYS_TO_DROP,
+                                 drop_days=DAYS_TO_DROP,
                                  drop_zero_weight=True, denoised_resp=False)
 
 resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
@@ -79,18 +79,12 @@ max batch_size:
 current best setting: 
 '''
 resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
-
 util_cols = resp_cols
-
 resp_index = [resp_cols_all.index(r) for r in util_cols]
 
 regularizer = UtilityLoss(alpha=1e-1, scaling=SCALING, normalize=None, resp_index=resp_index)
 
 loss_fn = SmoothBCEwLogits(smoothing=0.005)
-
-all_train = pd.concat([train, valid], axis=0)
-all_train_set = ExtendedMarketDataset(all_train, features=feat_cols, targets=target_cols, resp=resp_cols)
-train_loader = DataLoader(all_train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
@@ -100,7 +94,6 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
 finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
 
 finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
-
 early_stop = EarlyStopping(patience=EARLYSTOP_NUM, mode="max", save_threshold=6000)
 # %%
 _fold = 1
@@ -119,11 +112,10 @@ for epoch in range(EPOCHS):
     valid_pred = valid_epoch(model, valid_loader, device)
     valid_auc, valid_score = get_valid_score(valid_pred, valid,
                                              f=median_avg, threshold=0.5, target_cols=target_cols)
-    # model_file = MODEL_DIR + \
-    #     f"/resmlp_interleave_{_fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
-    model_file = MODEL_DIR + \
-        f"/resw_interleave_{_fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
-    early_stop(valid_auc, model, model_path=model_file,
+
+    model_file = MODEL_DIR + f"/final_volatile_{_fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
+    early_stop(valid_auc, model, 
+               model_path=model_file,
                epoch_utility_score=valid_score)
     tqdm.write(f"\n[Epoch {epoch+1}/{EPOCHS}] \t Fold {_fold}")
     tqdm.write(
@@ -137,15 +129,10 @@ for epoch in range(EPOCHS):
         break
 
 if DEBUG:
-    torch.save(model.state_dict(), MODEL_DIR + f"/resmlp_interleave_fold_{_fold}.pth")
+    torch.save(model.state_dict(), MODEL_DIR + f"/model_{_fold}.pth")
 # %%
 _fold = 4
-# model_file = f"resmlp_interleave_0_util_7437_auc_0.6389.pth"
-# model_file = f"resmlp_ft_old_fold_{_fold}.pth" # fold 1, 3, 4 good
-# model_file = f"resmlp_finetune_fold_{_fold}.pth"
 model_file = f"resw_interleave_1_util_6455_auc_0.6237.pth"
-# model_file = f"resw_interleave_1_util_6333_auc_0.6211.pth"
-# model_file = f"resmlp_{_fold}.pth"
 print(f"Loading {model_file} for cv check.\n")
 model_weights = os.path.join(MODEL_DIR, model_file)
 
@@ -157,14 +144,15 @@ feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
 
 model = ResidualMLP(input_size=len(feat_cols), hidden_size=256, output_size=len(target_cols))
 model.to(device)
-model.load_state_dict(torch.load(model_weights))
-# model.load_state_dict(torch.load(
-#     model_weights, map_location=torch.device('cpu')))
+try:
+    model.load_state_dict(torch.load(model_weights))
+except:
+    model.load_state_dict(torch.load(
+        model_weights, map_location=torch.device('cpu')))
 model.eval();
 
-train_parquet = os.path.join(DATA_DIR, 'train.parquet')
-train = preprocess_pt(train_parquet, day_start=0, day_split=None, 
-                  drop_zero_weight=False)
+train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
+train = preprocess_pt(train_parquet, day_start=0, day_split=None, drop_zero_weight=False)
 
 CV_START_DAY = 100
 CV_DAYS = 25

@@ -18,7 +18,7 @@
 - [ ] A table compiling what features will be using `ffill`, previous day mean, overall mean, etc (maybe not necessary?).
 - [ ] Trading frequency can be determined by number of trades per day, store this in a cache to choose model.
 - [ ] Using `feature_0` to choose models, and/or threshold (based on `feature_0`'s previous day count).
-- [ ] Using rolling mean/exponential weighted mean of previous days as input/fillna, working out a submission pipeline.
+- [x] Using rolling mean/exponential weighted mean of previous days as input/fillna, working out a submission pipeline.
 - [x] Implement a regularizer using the utility function.
 - [x] Train with all weights (maybe making `weight==0` rows' weights to certain small number `1e-5`), then train with all positive `weight` rows (slightly better public leaderboard).
 - [x] Train with a weighted cross entropy loss, the weight is $\ln(1+w)$; the local CV became better but public leaderboard became worse. 

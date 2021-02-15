@@ -453,6 +453,45 @@ def preprocess_pt(train_file, day_start=86,
     else:
         return train
 
+def preprocess_final(train_file, day_start=86, 
+                  day_split=450, drop_days=None,
+                  drop_zero_weight=True, zero_weight_thresh=1e-7, 
+                  denoised_resp=False, num_dn_target=1):
+    try:
+        train = pd.read_parquet(train_file)
+    except:
+        train = pd.read_feather(train_file)
+    train = train.loc[train.date >= day_start].reset_index(drop=True)
+
+    if drop_days:
+        train = train.query(f'date not in {drop_days}').reset_index(drop = True)
+    
+    if denoised_resp:
+        train = add_denoised_target(train, num_dn_target=num_dn_target)
+
+    if drop_zero_weight:
+        train = train[train['weight'] > 0].reset_index(drop = True)
+    elif drop_zero_weight==False and zero_weight_thresh is not None:
+        train[['weight']] = train[['weight']].clip(zero_weight_thresh)
+
+    # vanilla actions based on resp
+    train['action'] = (train['resp'] > 0).astype(int)
+    for c in range(1,5):
+        train['action_'+str(c)] = (train['resp_'+str(c)] > 0).astype(int)
+
+    train.fillna(train.mean(),inplace=True)
+    
+    train['cross_41_42_43'] = train['feature_41'] + train['feature_42'] + train['feature_43']
+    train['cross_1_2'] = train['feature_1'] / (train['feature_2'] + 1e-5)
+
+    if day_split is not None:
+        valid = train.loc[train.date >= day_split].reset_index(drop=True)
+        # train = train.loc[train.date < day_split].reset_index(drop=True)
+        return train, valid
+    else:
+        return train
+
+
 '''
 Simulate the inference env of Kaggle
 Utility function taken from https://www.kaggle.com/gogo827jz/jane-street-super-fast-utility-score-function

@@ -142,19 +142,20 @@ if __name__ == '__main__':
         train_file = os.path.join(DATA_DIR, 'train.parquet')
         train = pd.read_parquet(train_file)
 
-    train = train.loc[train.date > 85].reset_index(drop=True)
-
+    # train = train.loc[train.date > 85].reset_index(drop=True)
+    drop_days = [2, 36, 270, 294]
+    train = train.query(f'date not in {drop_days}').reset_index(drop=True)
 
     '''
     0: all resps
     1: resp, 3, 4
     2: resp, 1, 2
     '''
-    _f = 1
-    # targets = ['resp','resp_1','resp_2','resp_3','resp_4']
+    _f = 0
+    targets = ['resp','resp_1','resp_2','resp_3','resp_4']
     # targets = ['resp','resp_3','resp_4']
     # targets = ['resp','resp_1','resp_2']
-    targets = ['resp','resp_2','resp_4']
+    # targets = ['resp','resp_2','resp_4']
     targets_f0 = targets + ['feature_0']
 
     target_tf = RMTDenoising(sample=0.7, seed=1127802+_f)
@@ -166,4 +167,4 @@ if __name__ == '__main__':
     targets_denoised[[f'resp_dn_{_f}']] = -targets_denoised[f'resp_dn_{_f}'].values
     print(targets_denoised.head(10))
     print(train[targets_f0].head(10))
-    targets_denoised[[f'resp_dn_{_f}']].to_csv(os.path.join(DATA_DIR,f'target_dn_{_f}.csv'), index=False)
+    targets_denoised[[f'resp_dn_{_f}']].to_csv(os.path.join(DATA_DIR,f'target_dn_{_f}_pdm.csv'), index=False)

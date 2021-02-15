@@ -73,6 +73,9 @@ def load_train(drop_days=None):
         train = pd.read_parquet(train_parquet)
         if drop_days:
             train = train.query(f'date not in {drop_days}').reset_index (drop = True)
+        feat_cols = [f'feature_{i}' for i in range(130)]
+        train[feat_cols].mean().to_csv(os.path.join(DATA_DIR, 'f_mean_final.csv'), 
+                                       index_label=['features'], header=['mean'])
     return train
 
 
@@ -111,7 +114,9 @@ def process_train_rolling(train, debug=False):
             pbar.update()
     
     train_pdm = pd.DataFrame(row_vals, columns=train.columns, index=train.index).astype(train_dtypes)
-    train_pdm.to_parquet('train_pdm.parquet', index=False)
+
+    if not debug:
+        train_pdm.to_parquet(os.path.join(DATA_DIR, 'train_pdm.parquet'), index=False)
 
   
 # %%
@@ -119,4 +124,5 @@ def process_train_rolling(train, debug=False):
 if __name__ == '__main__':
     get_system()
     train = load_train(drop_days=[2, 36, 270, 294])
-    process_train_rolling(train, debug=False)
+    # process_train_rolling(train, debug=False)
+# %%
