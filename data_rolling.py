@@ -67,15 +67,24 @@ class RunningPDA:
 
 
 #%%
-def load_train(drop_days=None):
+def load_train(drop_days=None, zero_weight=True):
     with timer("Loading train parquet"):
         train_parquet = os.path.join(DATA_DIR, 'train.parquet')
         train = pd.read_parquet(train_parquet)
         if drop_days:
             train = train.query(f'date not in {drop_days}').reset_index (drop = True)
+        
+        if not zero_weight:
+            train = train.query('weight > 0').reset_index (drop = True)
+        
         feat_cols = [f'feature_{i}' for i in range(130)]
-        train[feat_cols].mean().to_csv(os.path.join(DATA_DIR, 'f_mean_final.csv'), 
-                                       index_label=['features'], header=['mean'])
+        # train[feat_cols].mean().to_csv(os.path.join(DATA_DIR, 'f_mean_final.csv'), 
+        #                                index_label=['features'], header=['mean'])
+        f_mean = train[feat_cols].mean().values.reshape(1,-1)
+        if zero_weight:
+            np.save(DATA_DIR+'f_mean_after_85_include_zero_weight.npy', f_mean)
+        else:
+            np.save(DATA_DIR+'f_mean_after_85_positive_weight.npy', f_mean)
     return train
 
 
@@ -123,6 +132,7 @@ def process_train_rolling(train, debug=False):
 
 if __name__ == '__main__':
     get_system()
-    train = load_train(drop_days=[2, 36, 270, 294])
+    # train = load_train(drop_days=[2, 36, 270, 294])
+    train = load_train(drop_days=list(range(0,86))+[270, 294])
     # process_train_rolling(train, debug=False)
 # %%
