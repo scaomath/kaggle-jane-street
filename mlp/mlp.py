@@ -480,6 +480,7 @@ class EarlyStopping:
         self.mode = mode
         self.monitor = monitor
         self.best_score = None
+        self.best_epoch=0
         self.best_utility_score = None
         self.early_stop = False
         self.delta = delta
@@ -489,8 +490,9 @@ class EarlyStopping:
             self.val_score = -np.Inf
         self.message = None
         self.save_threshold = save_threshold
+        
 
-    def __call__(self, epoch_score, model, model_path, epoch_utility_score):
+    def __call__(self, epoch, epoch_score, model, model_path, epoch_utility_score):
 
         if self.mode == "min":
             score = -1.0 * epoch_score
@@ -501,6 +503,7 @@ class EarlyStopping:
         if self.monitor == 'utility':
             if self.best_utility_score is None:
                 self.best_utility_score = util_score
+                self.best_epoch = epoch
             elif util_score < self.best_utility_score:
                 self.counter += 1
                 self.message = f'EarlyStopping counter: {self.counter} out of {self.patience}'
@@ -513,10 +516,12 @@ class EarlyStopping:
                     self.save_checkpoint(epoch_score, model, model_path)
                 self.best_utility_score = util_score
                 self.counter = 0
+                self.best_epoch = epoch
         else:
             if self.best_score is None:
                 self.best_score = score
-                self.save_checkpoint(epoch_score, model, model_path)
+                self.best_epoch = epoch
+                # self.save_checkpoint(epoch_score, model, model_path)
             elif score < self.best_score: #  + self.delta
                 self.counter += 1
                 self.message = f'EarlyStopping counter: {self.counter} out of {self.patience}'
@@ -525,6 +530,7 @@ class EarlyStopping:
             else:
                 self.message = f'Valid score :({self.best_score:.4f} --> {score:.4f}).'
                 self.best_score = score
+                self.best_epoch = epoch
                 if score > self.save_threshold:
                     self.message += " model saved."
                     self.save_checkpoint(epoch_score, model, model_path)

@@ -99,8 +99,9 @@ get_seed(SEED+SEED*_fold)
 
 for epoch in range(EPOCHS):
 
-    # train_loss = train_epoch(model, optimizer, scheduler,loss_fn, train_loader, device)
-    train_loss = train_epoch_weighted(model, optimizer, scheduler, loss_fn, train_loader, device)
+    # train_loss = train_epoch(model, optimizer, None, loss_fn, train_loader, device)
+    train_loss = train_epoch_weighted(model, optimizer, None, loss_fn, train_loader, device)
+    scheduler.step()
     lr = optimizer.param_groups[0]['lr']
     if (epoch+1) % 2 == 0:
         _ = train_epoch_finetune(model, finetune_optimizer, scheduler,
@@ -111,12 +112,12 @@ for epoch in range(EPOCHS):
                                              f=median_avg, threshold=0.5, target_cols=target_cols)
 
     model_file = MODEL_DIR + f"/final_volatile_{_fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
-    early_stop(valid_auc, model, 
+    early_stop(epoch, valid_auc, model, 
                model_path=model_file,
                epoch_utility_score=valid_score)
     tqdm.write(f"\n[Epoch {epoch+1}/{EPOCHS}] \t Fold {_fold}")
     tqdm.write(f"Train loss: {train_loss:.4e} \t Current learning rate: {lr:.4e}")
-    tqdm.write(f"Best util: {early_stop.best_utility_score:.2f} \t {early_stop.message} ")
+    tqdm.write(f"Best util: {early_stop.best_utility_score:.2f} at epoch {early_stop.best_epoch} \t {early_stop.message} ")
     tqdm.write(f"Valid utility: {valid_score:.2f} \t Valid AUC: {valid_auc:.4f}\n")
     if early_stop.early_stop:
         print("\nEarly stopping")
@@ -136,7 +137,8 @@ feat_cols.extend(['weight'])
 feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
 
 
-model = ResidualMLP(input_size=len(feat_cols), hidden_size=256, output_size=len(target_cols))
+model = ResidualMLP(input_size=len(feat_cols), hidden_size=256, 
+                    output_size=len(target_cols))
 model.to(device)
 try:
     model.load_state_dict(torch.load(model_weights))
