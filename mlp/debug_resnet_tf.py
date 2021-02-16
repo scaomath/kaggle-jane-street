@@ -61,7 +61,7 @@ all_train = all_train[all_train['weight'] != 0].reset_index(drop=True)
 
 all_train = all_train.astype({feat: np.float32 for feat in features})
 #%%
-_fold = 4
+_fold = 0
 split = [('date > 450','date <= 450'),
          ('date <= 450 and date > 400','date <= 400 or date>450'),
          ('date <= 400 and date > 350','date <= 350 or date>400'),
@@ -202,14 +202,13 @@ class UtilEvaluation(Callback):
 #%%
 tf.keras.backend.clear_session()
 SEED = 1127
-get_seed(SEED)
+tf.random.set_seed(SEED)
 tf_model = create_resnet(len(features_1), len(features_2), len(resp_cols), 
-                         hidden_size=256, learning_rate=1e-4,label_smoothing=5e-03)
+                         hidden_size=300, learning_rate=1e-4, label_smoothing=5e-03)
 util_cb = UtilEvaluation(val_df=valid, start_day=valid.date.min(), end_day=valid.date.max())
 tf_model.summary()
 # %%
-EPOCHS = 45
-get_seed(SEED)
+EPOCHS = 50
 tf_model.fit(X_train, y_train, epochs=EPOCHS, batch_size=8192, 
              validation_data=(X_val, y_val),
              verbose=1,
@@ -218,4 +217,17 @@ tf_model.fit(X_train, y_train, epochs=EPOCHS, batch_size=8192,
 
 # save model
 tf_model.save(f'tf_res_fold_{_fold}_ep_{EPOCHS}.h5')
+# %%
+
+all_val_preds = []
+for i in range(6):
+    val_preds = pd.read_csv(MODEL_DIR+f'val_pred_fold_{5-i}.csv')
+    all_val_preds.append(val_preds)
+#%%
+all_val_preds = pd.concat(all_val_preds,axis=0)
+all_val_preds = all_val_preds.query('date >= 249 and date <=499')
+valid_score = utility_score_bincount(date=all_val_preds.date.values, 
+                                    weight=all_val_preds.weight.values,
+                                    resp=all_val_preds.resp.values, 
+                                    action=all_val_preds.action.values)
 # %%

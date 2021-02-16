@@ -453,9 +453,9 @@ def preprocess_pt(train_file, day_start=86,
     else:
         return train
 
-def preprocess_final(train_file, day_start=86, 
-                  day_split=450, drop_days=None,
+def preprocess_final(train_file, day_start=86, drop_days=None,
                   drop_zero_weight=True, zero_weight_thresh=1e-7, 
+                  training_days=None, valid_days=None,
                   denoised_resp=False, num_dn_target=1):
     try:
         train = pd.read_parquet(train_file)
@@ -484,9 +484,9 @@ def preprocess_final(train_file, day_start=86,
     train['cross_41_42_43'] = train['feature_41'] + train['feature_42'] + train['feature_43']
     train['cross_1_2'] = train['feature_1'] / (train['feature_2'] + 1e-5)
 
-    if day_split is not None:
-        valid = train.loc[train.date >= day_split].reset_index(drop=True)
-        # train = train.loc[train.date < day_split].reset_index(drop=True)
+    if valid_days is not None and training_days is not None:
+        valid = train.loc[train.date.isin(valid_days)].reset_index(drop=True)
+        train = train.loc[train.date.isin(training_days)].reset_index(drop=True)
         return train, valid
     else:
         return train

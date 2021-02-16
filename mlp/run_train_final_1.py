@@ -28,13 +28,18 @@ TRAINING_START = 0
 FINETUNE_BATCH_SIZE = 2048_00
 BATCH_SIZE = 8196
 EPOCHS = 120
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-5
-EARLYSTOP_NUM = 10
+EARLYSTOP_NUM = 20
 NFOLDS = 1
 SCALING = 12
 THRESHOLD = 0.5
+CV_THRESH = 6000
 DAYS_TO_DROP = [2, 36, 270, 294]
+VOLATILE_DAYS = [1, 3, 4, 5, 8, 9, 12, 16, 17, 18, 23, 24, 26, 27, 30, 31, 32, 37, 38, 
+                 41, 43, 44, 45, 46, 47, 59, 63, 69, 80, 85, 161, 168, 185, 196, 223, 231, 235, 
+                 262, 274, 276, 283, 324, 346, 353, 354, 356, 379, 380, 382, 393, 394, 427, 438, 
+                 452, 454, 459, 462, 468, 475, 488, 489, 491, 492, 495]
 
 SEED = 1127802
 get_seed(SEED)
@@ -45,13 +50,14 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # %%
 with timer("Preprocessing train"):
     train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
-    train, valid = preprocess_pt(train_parquet, day_start=TRAINING_START, day_split=450,
-                                 drop_days=DAYS_TO_DROP,
-                                 drop_zero_weight=True, denoised_resp=False)
+    train, valid = preprocess_final(train_parquet, day_start=TRAINING_START, 
+                                    training_days=range(0,475), valid_days=range(475, 500),
+                                    drop_days=DAYS_TO_DROP,
+                                    drop_zero_weight=True, denoised_resp=False)
 
-resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
+resp_cols = ['resp_3','resp', 'resp_4']
 resp_cols_all = resp_cols
-target_cols = ['action', 'action_1', 'action_2', 'action_3', 'action_4']
+target_cols = ['action_3', 'action', 'action_4']
 feat_cols = [f'feature_{i}' for i in range(130)]
 
 feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
@@ -70,15 +76,6 @@ model = ResidualMLP(input_size=len(feat_cols), hidden_size=256, output_size=len(
 model.to(device)
 summary(model, input_size=(len(feat_cols), ))
 # %%
-'''
-fine-tuning the trained model based on resp or utils
-current fine-tuning train set is all train
-max batch_size:
-3 resps: 102400
-
-current best setting: 
-'''
-resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
 util_cols = resp_cols
 resp_index = [resp_cols_all.index(r) for r in util_cols]
 
@@ -91,21 +88,21 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
                                                                  T_0=10, T_mult=1, 
                                                                  eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
 
-finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
+finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=10)
 
-finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
-early_stop = EarlyStopping(patience=EARLYSTOP_NUM, mode="max", save_threshold=6000)
+finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-4)
+early_stop = EarlyStopping(patience=EARLYSTOP_NUM, mode="max", save_threshold=CV_THRESH)
 # %%
-_fold = 1
-SEED = 802
+_fold = 0
+SEED = 1127802
 get_seed(SEED+SEED*_fold)
 
 for epoch in range(EPOCHS):
 
-    train_loss = train_epoch(model, optimizer, scheduler,loss_fn, train_loader, device)
-    # train_loss = train_epoch_weighted(model, optimizer, scheduler, loss_fn, train_loader, device)
+    # train_loss = train_epoch(model, optimizer, scheduler,loss_fn, train_loader, device)
+    train_loss = train_epoch_weighted(model, optimizer, scheduler, loss_fn, train_loader, device)
     lr = optimizer.param_groups[0]['lr']
-    if (epoch+1) % 10 == 0:
+    if (epoch+1) % 2 == 0:
         _ = train_epoch_finetune(model, finetune_optimizer, scheduler,
                                  regularizer, finetune_loader, device, loss_fn=loss_fn)
 
@@ -118,12 +115,9 @@ for epoch in range(EPOCHS):
                model_path=model_file,
                epoch_utility_score=valid_score)
     tqdm.write(f"\n[Epoch {epoch+1}/{EPOCHS}] \t Fold {_fold}")
-    tqdm.write(
-        f"Train loss: {train_loss:.4f} \t Current learning rate: {lr:.4e}")
-    tqdm.write(
-        f"Best util: {early_stop.best_utility_score:.2f} \t {early_stop.message} ")
-    tqdm.write(
-        f"Valid utility: {valid_score:.2f} \t Valid AUC: {valid_auc:.4f}\n")
+    tqdm.write(f"Train loss: {train_loss:.4e} \t Current learning rate: {lr:.4e}")
+    tqdm.write(f"Best util: {early_stop.best_utility_score:.2f} \t {early_stop.message} ")
+    tqdm.write(f"Valid utility: {valid_score:.2f} \t Valid AUC: {valid_auc:.4f}\n")
     if early_stop.early_stop:
         print("\nEarly stopping")
         break
