@@ -5,6 +5,52 @@
 
 # Final submission
 
+## Data
+1. `fillna()` uses past day mean including all weight zero rows, and the
+mean is taken with only 2 partial days, and 2 outlier days dropped.
+2. All data: only drop the two partial days and the two <2k `ts_id` days.
+3. Smoother data: aside from 1, query day > 85, drop `ts_id` > 8700 days.
+4. Final training uses only `weight > 0` rows, but with a randomly
+selected 40% of weight zero rows' weight being replaced by 1e-7 to
+reduce overfitting.
+6. A new de-noised target is generated with all five targets.
+
+## Splits
+`PurgedGroupCV`, day gap = 5, last three folds.
+
+## Models
+- (PT) torch baseline with the skip connection mechanics, around 400k
+parameters, fast inference. Easy to get overfit though.
+- (AE+TF) Autoencoder + Tensorflow small MLP net with skip connection in
+the first layer. Small net. Currently the best scored public ones with
+a serious CV.
+- (TF) tensorflow Residual MLP using a filtering layer with high dropout rates to filter out hand-picked unimportant features suggested by Carl.
+- (TF overfit) the infamous overfit model with a 1111 seed.
+
+## Train
+1. Volatile models: all data with only `resp`, `resp_3`, `resp_4` as targets.
+2. Smoother models: smoother data with all five `resp`s.
+3. De-noised models: smoother data with all five `resp`s + a de-noised target.
+4. Optimizer is simply Adam with a cosine annealing scheduler that allow warm restarts.
+5. During training of torch models, a fine-tuning regularizer is applied each 10 epochs to maximize the utility function by choosing action being the sigmoid of the outputs (Only for torch models, I do not know how to incorporate this in `tensorflow` training, as tf's custom loss function is not that straightforward to keep track of extra inputs between batches).
+
+## Submissions
+1. local best CV ones within a 5 seeds bag. We can afford 6 (PT)s, 3
+(AE+TF)s, and 1 (TF) ResNet.
+2. Trained with all data using the "public leaderboard as CV" epochs
+determined earlier, plus the infamous (TF overfit model).
+
+## Inference 
+1. CPU inference because the submission is CPU-bounded rather GPU. Torch models are usually faster than TF even with numba backend enabled.
+2. Use `feature_64`'s average gradient (a scaled version of $\arcsin (t)$), and the number of trades in the previous day as a criterion to determine the models to include.
+3. Blending is always concat models in a bag then taking the middle 70%'s
+average, then concat again to take the middle 50% average. For
+example, if we have 5 (PT)s, 3 (AE+TF)s and 1 (TF), then 5 (PT)'s predictions
+are concat'ed and averaged along axis 0 with the middle three, and (AE+TF) submissions are taken the median. Lastly, the subs are concat'ed again to take the middle 50%'s average.
+4. Regular days:  5 (P), 1(P) with denoised target, 3 (AE+TF)s, and 1
+(TF) trained on the smoother models.
+5. Busy days: above models trained on all data, minus the denoised target one.
+
 
 
 # Things to try for the final submission:
