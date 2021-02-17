@@ -51,7 +51,7 @@ with timer("preprocess train"):
 #%%
 features = [c for c in train.columns if 'feature' in c]
 
-resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
+resp_cols = ['resp_1', 'resp_2', 'resp_3', 'resp', 'resp_4']
 
 X = train[features].values
 y = np.stack([(train[c] > 0).astype('int') for c in resp_cols]).T #Multitarget
@@ -159,7 +159,7 @@ tuner = CVTuner(
         num_initial_points=10,
         max_trials=50))
 
-gkf = PurgedGroupTimeSeriesSplit(n_splits = FOLDS, group_gap=20)
+gkf = PurgedGroupTimeSeriesSplit(n_splits = FOLDS, group_gap=5)
 splits = list(gkf.split(y, groups=train['date'].values))
 #%%
 if HP_SEARCH:

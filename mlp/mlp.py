@@ -587,7 +587,7 @@ def train_epoch_weighted(model, optimizer, scheduler, loss_fn, dataloader, devic
             resp = data['resp'].to(device)
             weight = data['weight'].to(device)
             # weights = torch.log(1+data['weight']).to(device)
-            weights = (torch.sqrt(resp.abs()*weight.clamp(max=20))).to(device)
+            weights = (torch.sqrt(resp.abs())*weight.clamp(max=20)).to(device)
             outputs = model(features)
             loss = loss_fn(outputs, label, weights=weights)
             loss.backward()
