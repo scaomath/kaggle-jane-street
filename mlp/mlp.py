@@ -35,8 +35,8 @@ from utils_js import *
 NFOLDS = 5
 
 feat_cols = [f'feature_{i}' for i in range(130)]
-resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4']
-target_cols = ['action_0', 'action_1', 'action_2', 'action_3', 'action_4']
+resp_cols = ['resp_1', 'resp_2', 'resp_3', 'resp', 'resp_4']
+target_cols = ['action_1', 'action_2', 'action_3', 'action', 'action_4']
 tag_cols = [f'tag_{i}' for i in range(29)]
 
 hidden_units = [None, 160, 160, 160]
@@ -319,7 +319,8 @@ class ExtendedMarketDataset:
                            targets=target_cols,
                            resp = resp_cols,
                            date='date',
-                           weight='weight'):
+                           weight='weight',
+                           ):
         self.features = df[features].values
         self.label = df[targets].astype('int').values.reshape(-1, len(targets))
         self.resp = df[resp].astype('float').values.reshape(-1, len(resp))
@@ -336,6 +337,33 @@ class ExtendedMarketDataset:
             'resp':torch.tensor(self.resp[idx], dtype=torch.float),
             'date':torch.tensor(self.date[idx], dtype=torch.int32),
             'weight':torch.tensor(self.weight[idx], dtype=torch.float),
+        }
+
+class MarketDatasetCat:
+    def __init__(self, df, features=feat_cols, 
+                           cat_features=None,
+                           targets=target_cols,
+                           resp = resp_cols,
+                           date='date',
+                           weight='weight'):
+        self.features = df[features].values
+        self.label = df[targets].astype('int').values.reshape(-1, len(targets))
+        self.resp = df[resp].astype('float').values.reshape(-1, len(resp))
+        self.date = df[date].astype('int').values.reshape(-1,1)
+        self.weight = df[weight].astype('float').values.reshape(-1,1)
+        self.cat_features = df[cat_features].astype('int').values
+
+    def __len__(self):
+        return len(self.label)
+
+    def __getitem__(self, idx):
+        return {
+        'features': torch.tensor(self.features[idx], dtype=torch.float),
+        'cat_features': torch.tensor(self.cat_features[idx], dtype=torch.int8),
+        'label': torch.tensor(self.label[idx], dtype=torch.float),
+        'resp':torch.tensor(self.resp[idx], dtype=torch.float),
+        'date':torch.tensor(self.date[idx], dtype=torch.int32),
+        'weight':torch.tensor(self.weight[idx], dtype=torch.float),
         }
 
 class SmoothBCEwLogits(_WeightedLoss):
@@ -566,6 +594,34 @@ def train_epoch(model, optimizer, scheduler, loss_fn, dataloader, device):
 
     return final_loss
 
+def train_epoch_cat(model, optimizer, scheduler, loss_fn, dataloader, device):
+    model.train()
+    final_loss = 0
+    len_data = len(dataloader)
+
+    with tqdm(total=len_data) as pbar:
+        for data in dataloader:
+            optimizer.zero_grad()
+            features = data['features'].to(device)
+            cat_features = data['cat_features'].to(device)
+            label = data['label'].to(device)
+            outputs = model(features, cat_features)
+            loss = loss_fn(outputs, label)
+            loss.backward()
+
+            optimizer.step()
+            if scheduler:
+                scheduler.step()
+
+            final_loss += loss.item()
+            lr = optimizer.param_groups[0]['lr']
+            pbar.set_description(f'learning rate: {lr:.5e}')
+            pbar.update()
+
+    final_loss /= len(dataloader)
+
+    return final_loss
+
 def train_epoch_weighted(model, optimizer, scheduler, loss_fn, dataloader, device):
     model.train()
     final_loss = 0
@@ -682,15 +738,21 @@ def train_epoch_finetune(model, optimizer, scheduler, regularizer, dataloader, d
 
     return utils_loss
 
-def valid_epoch(model, dataloader, device):
+def valid_epoch(model, dataloader, device, cat_input=False):
     model.eval()
     preds = []
 
     for data in dataloader:
-        features = data['features'].to(device)
 
-        with torch.no_grad():
-            outputs = model(features)
+        if cat_input:
+            features = data['features'].to(device)
+            cat_features = data['cat_features'].to(device)
+            with torch.no_grad():
+                outputs = model(features, cat_features)
+        else:
+            features = data['features'].to(device)
+            with torch.no_grad():
+                outputs = model(features)
 
         preds.append(outputs.sigmoid().detach().cpu().numpy())
 

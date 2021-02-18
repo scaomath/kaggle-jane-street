@@ -1,5 +1,5 @@
 #%% denoising target
-import os
+import os, sys
 import pandas as pd
 import numpy as np
 
@@ -9,6 +9,10 @@ from sklearn.base import BaseEstimator, TransformerMixin
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.dirname(current_path)
+sys.path.append(HOME)
+for f in ['/home/scao/anaconda3/lib/python3.8/lib-dynload', 
+          '/home/scao/anaconda3/lib/python3.8/site-packages']:
+    sys.path.append(f) 
 MODEL_DIR = HOME+'/models/'
 DATA_DIR = HOME+'/data/'
 from utils import *

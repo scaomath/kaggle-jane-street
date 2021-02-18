@@ -1,8 +1,19 @@
 #%%
 import os
 import sys
+current_path = os.path.dirname(os.path.abspath(__file__))
+HOME = os.path.dirname(current_path)
+sys.path.append(HOME)
+# for f in ['/home/scao/anaconda3/lib/python3.8/lib-dynload', 
+#           '/home/scao/anaconda3/lib/python3.8/site-packages']:
+#     sys.path.append(f) 
+
 import pandas as pd
+pd.set_option('display.max_rows', 100)
+pd.set_option('display.max_columns', 100)
+
 import numpy as np
+import datatable as dt
 from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -11,15 +22,11 @@ from jupyterthemes import jtplot
 jtplot.style(theme='onedork', context='notebook', ticks=True, grid=False)
 
 
-current_path = os.path.dirname(os.path.abspath(__file__))
-HOME = os.path.dirname(current_path)
-sys.path.append(HOME)
 MODEL_DIR = HOME+'/models/'
 DATA_DIR = HOME+'/data/'
-
 from utils import *
 from utils_js import *
-from data.data_rolling import RunningPDA, RunningEWMean, RunningMean
+# from data.data_rolling import RunningPDA, RunningEWMean, RunningMean
 
 # %%
 '''
@@ -42,27 +49,14 @@ https://www.kaggle.com/lucasmorin/running-algos-fe-for-fast-inference?scriptVers
 '''
 # %%
 with timer("Loading train"):
-    train_parquet = os.path.join(DATA_DIR, 'train.parquet')
-    train = pd.read_parquet(train_parquet)
+    train_csv = os.path.join(DATA_DIR, 'train.csv')
+    train = dt.fread(train_csv).to_pandas()
+    train = train.set_index('ts_id')
 # %%
-plt.figure(figsize = (8,5))
-sns.distplot(train['feature_3'], bins=200,
-                  kde_kws={"clip":(-0.1,-0.02)}, 
-                  hist_kws={"range":(-0.1,-0.02)},
-                  color='darkcyan', kde=True);
-
-#%%
-# %%
-plt.figure(figsize = (8,5))
-sns.distplot(train['feature_3'], bins=200,
-                  kde_kws={"clip":(0, 16)}, 
-                  hist_kws={"range":(0, 16)},
-                  color='darkcyan', kde=True);
-# %%
-plt.figure(figsize = (8,5))
-train['feature_3_log'] = np.log(train['feature_3'].abs())*np.sign(train['feature_3'].values)
-sns.distplot(train['feature_3_log'], bins=200,
-                  kde_kws={"clip":(2,3)}, 
-                  hist_kws={"range":(2,3)},
-                  color='darkcyan', kde=True);
+feat_reg_index = [0, 17, 18, 37, 39, 40, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 55, 57, 58]
+feat_reg_index += list(range(60,69))
+feat_reg_index += [89, 101, 108, 113, 119, 120, 121, 122, 124, 125, 126, 128]
+feat_spike_index = list(set(range(130)).difference(feat_reg_index))
+features_reg = [f'feature_{i}' for i in feat_reg_index]
+features_spike = [f'feature_{i}' for i in feat_spike_index]
 # %%

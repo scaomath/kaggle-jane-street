@@ -69,9 +69,9 @@ are concat'ed and averaged along axis 0 with the middle three, and (AE+TF) submi
 - [x] Train with all weights (maybe making `weight==0` rows' weights to certain small number `1e-5`), then train with all positive `weight` rows (slightly better public leaderboard).
 - [x] Train with a weighted cross entropy loss, the weight is $\ln(1+w)$; the local CV became better but public leaderboard became worse. 
 - [x] Adding one or multiple de-noised targets by removing the eigenvalues of the covariance matrix.
-- [ ] Train models including the first 85 days but excluding outlier days (high volatility days). For low volatile days, use the denoised models (?).
+- [x] Train models including the first 85 days but excluding outlier days (high volatility days). For low volatile days, use the denoised models (?).
 - [x] Use public LB to do a variance test to determine whether the seed 1111 overfitting model can be used to do final submission. (weighted by 8 due to the total days factor) Public test 0-25:2565, 25-50:4131, 50-75:3156, 75-100:743; std=1234.
-- [ ] Testing the correlation between, for example `feature 3`'s exponential transformation and resps conlumns (or other transforms).
+- [ ] Testing the correlation between, for example `feature 3`'s exponential transformation and resps columns (or other transforms).
 
 
 # Ideas and notes

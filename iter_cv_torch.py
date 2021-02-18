@@ -34,7 +34,7 @@ with timer("Loading train parquet"):
     train_parquet = os.path.join(DATA_DIR, 'train.parquet')
     train = pd.read_parquet(train_parquet)
 
-train['action'] = (train['resp'] > 0)
+train['action'] = (train['resp'] > 0).astype(int)
 for c in range(1,5):
     train['action'] = train['action'] & ((train['resp_'+str(c)] > 0))
 features = [c for c in train.columns if 'feature' in c]
@@ -80,7 +80,7 @@ class Iter_Valid(object):
         else:
             raise StopIteration()
 
-    def predict(self,pred_df):
+    def predict(self, pred_df):
         predicted.append(pred_df)
 # %%
 model_list = []
