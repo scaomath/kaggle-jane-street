@@ -90,8 +90,6 @@ class ResidualMLP(nn.Module):
 
         x1 = self.dense1(x)
         x1 = self.batch_norm1(x1)
-        # x = F.relu(x)
-        # x = self.PReLU(x)
         x1 = self.LeakyReLU(x1)
         x1 = self.dropout1(x1)
 
@@ -99,8 +97,6 @@ class ResidualMLP(nn.Module):
 
         x2 = self.dense2(x)
         x2 = self.batch_norm2(x2)
-        # x = F.relu(x)
-        # x = self.PReLU(x)
         x2 = self.LeakyReLU(x2)
         x2 = self.dropout2(x2)
 
@@ -108,8 +104,6 @@ class ResidualMLP(nn.Module):
 
         x3 = self.dense3(x)
         x3 = self.batch_norm3(x3)
-        # x = F.relu(x)
-        # x = self.PReLU(x)
         x3 = self.LeakyReLU(x3)
         x3 = self.dropout3(x3)
 
@@ -117,8 +111,6 @@ class ResidualMLP(nn.Module):
 
         x4 = self.dense4(x)
         x4 = self.batch_norm4(x4)
-        # x = F.relu(x)
-        # x = self.PReLU(x)
         x4 = self.LeakyReLU(x4)
         x4 = self.dropout4(x4)
 

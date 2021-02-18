@@ -685,20 +685,21 @@ def add_denoised_target(train_df, num_dn_target=1):
 
 ## preprocess for torch model
 def preprocess_pt(train_file, day_start=86, 
-                  day_split=450, drop_days=None,
-                  drop_zero_weight=True, zero_weight_thresh=1e-7, 
+                  day_split=475, drop_days=None,
+                  drop_zero_weight=True, zero_weight_thresh=1e-6, 
                   denoised_resp=False, num_dn_target=1):
     try:
         train = pd.read_parquet(train_file)
     except:
         train = pd.read_feather(train_file)
-    train = train.loc[train.date >= day_start].reset_index(drop=True)
 
     if drop_days:
         train = train.query(f'date not in {drop_days}').reset_index(drop = True)
     
     if denoised_resp:
         train = add_denoised_target(train, num_dn_target=num_dn_target)
+        
+    train = train.loc[train.date >= day_start].reset_index(drop=True)
 
     if drop_zero_weight:
         train = train[train['weight'] > 0].reset_index(drop = True)
@@ -717,7 +718,7 @@ def preprocess_pt(train_file, day_start=86,
 
     if day_split is not None:
         valid = train.loc[train.date >= day_split].reset_index(drop=True)
-        # train = train.loc[train.date < day_split].reset_index(drop=True)
+        train = train.loc[train.date < day_split].reset_index(drop=True)
         return train, valid
     else:
         return train
@@ -856,50 +857,6 @@ def median_avg(predictions, beta=0.7, axis=-1, debug=False):
 
     return to_avg.mean(axis=axis)
 
-
-class RunningPDA:
-    '''
-    Past day mean
-    Reference: Lucas Morin
-    https://www.kaggle.com/lucasmorin/running-algos-fe-for-fast-inference?scriptVersionId=50754012
-    '''
-    def __init__(self):
-        self.day = -1
-        self.past_mean = 0
-        self.cum_sum = 0
-        self.day_instances = 0
-        self.past_value = 0
-
-    def clear(self):
-        self.n = 0
-        self.windows.clear()
-
-    def push(self, x, date):
-        
-        x = fast_fillna(x, self.past_value)
-        self.past_value = x
-        
-        # change of day
-        if date>self.day:
-            self.day = date
-            if self.day_instances > 0:
-                self.past_mean = self.cum_sum/self.day_instances
-            else:
-                self.past_mean = 0
-            self.day_instances = 1
-            self.cum_sum = x
-            
-        else:
-            self.day_instances += 1
-            self.cum_sum += x
-
-    def get_mean(self):
-        return self.cum_sum/self.day_instances
-
-    def get_past_mean(self):
-        return self.past_mean
-
-
 #Designed to do all features at the same time, but Kaggle kernels are memory limited.
 class NeutralizeTransform:
     '''
@@ -937,27 +894,7 @@ class NeutralizeTransform:
         self.fit(X,y)
         return self.transform(X,y)
 
-class RunningEWMean:
-    '''
-    Reference: Lucas Morin
-    https://www.kaggle.com/lucasmorin/running-algos-fe-for-fast-inference?scriptVersionId=50754012
-    '''
-    def __init__(self, window=20, n_size = 1):
-        self.s = np.zeros(n_size)
-        self.past_value = 0
-        self.alpha = 2 /(window + 1)
 
-    def clear(self):
-        self.s = 0
-
-    def push(self, x):
-        
-        x = fast_fillna(x, self.past_value)
-        self.past_value = x
-        self.s = self.alpha * x + (1 - self.alpha) * self.s
-        
-    def get_mean(self):
-        return self.s
 
 if __name__ == "__main__":
     HOME = os.path.dirname(os.path.abspath(__file__))
