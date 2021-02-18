@@ -57,6 +57,13 @@ for c in range(NUM_DENOISE):
     resp_cols += [f'resp_dn_{c}']
     target_cols += [f'action_dn_{c}']
 
+# util_cols = ['resp', 'resp_1', 'resp_2']
+# util_cols = ['resp', 'resp_4']
+# util_cols = ['resp']
+util_cols = resp_cols
+
+resp_index = [resp_cols_all.index(r) for r in util_cols]
+
 
 # %%
 with timer("Preprocessing train"):
@@ -65,7 +72,7 @@ with timer("Preprocessing train"):
     train, valid = preprocess_pt(train_parquet, 
                                  day_start=TRAINING_START, 
                                  drop_days=DAYS_TO_DROP,
-                                 drop_zero_weight=False, 
+                                 drop_zero_weight=True, 
                                  zero_weight_thresh=None,
                                  denoised_resp=True, 
                                  num_dn_target=NUM_DENOISE)
@@ -78,25 +85,14 @@ for c in range(1, 5):
 
 
 # %%
-train_set = ExtendedMarketDataset(
-    train, features=feat_cols, targets=target_cols, resp=resp_cols)
-train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
+train_set = ExtendedMarketDataset(train, features=feat_cols, targets=target_cols, resp=resp_cols)
+train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=10)
 
 valid_set = ExtendedMarketDataset(valid, features=feat_cols, targets=target_cols, resp=resp_cols)
-valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
+valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=10)
 
 
 # %%
-resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3', 'resp_4'] 
-for i in range(NUM_DENOISE):
-    resp_cols += [f'resp_dn_{i}']
-
-# util_cols = ['resp', 'resp_1', 'resp_2']
-# util_cols = ['resp', 'resp_4']
-# util_cols = ['resp']
-util_cols = resp_cols
-
-resp_index = [resp_cols_all.index(r) for r in util_cols]
 
 # regularizer = RespMSELoss(alpha=1e-1, scaling=1, resp_index=resp_index)
 regularizer = UtilityLoss(alpha=5e-2, scaling=12, normalize=None, resp_index=resp_index)
@@ -108,7 +104,7 @@ loss_fn = SmoothBCEwLogits(smoothing=0.005)
 # train_loader = DataLoader(all_train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
 
 
-model = ResidualMLP(hidden_size=160, output_size=len(target_cols))
+model = ResidualMLP(hidden_size=128, output_size=len(target_cols))
 # model = MLP(hidden_units=(None,160,160,160), input_dim=len(feat_cols), output_dim=len(target_cols))
 model.to(device)
 summary(model, input_size=(len(feat_cols), ))
@@ -129,8 +125,7 @@ finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=
 
 finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
 
-early_stop = EarlyStopping(patience=EARLYSTOP_NUM,
-                           mode="max", save_threshold=5900)
+early_stop = EarlyStopping(patience=EARLYSTOP_NUM, mode="max", save_threshold=1200)
 
 # %%
 if LOAD_PRETRAIN:

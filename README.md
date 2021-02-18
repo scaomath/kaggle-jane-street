@@ -54,7 +54,7 @@ are concat'ed and averaged along axis 0 with the middle three, and (AE+TF) submi
 
 
 # Things to try for the final submission:
-- [x] EDA.
+- [x] Simple EDA.
 - [x] A simple starter.
 - [x] Stable CV-LB strategy (Updated Jan 22, now I think this is somehow impossible; updated Feb 12, certain correlation between the LB and the denoised target utility-finetuning around 70 epochs of ADAM).
 - [x] Writing a simple `iter_env` simulator.
@@ -71,6 +71,8 @@ are concat'ed and averaged along axis 0 with the middle three, and (AE+TF) submi
 - [x] Adding one or multiple de-noised targets by removing the eigenvalues of the covariance matrix.
 - [ ] Train models including the first 85 days but excluding outlier days (high volatility days). For low volatile days, use the denoised models (?).
 - [x] Use public LB to do a variance test to determine whether the seed 1111 overfitting model can be used to do final submission. (weighted by 8 due to the total days factor) Public test 0-25:2565, 25-50:4131, 50-75:3156, 75-100:743; std=1234.
+- [ ] Testing the correlation between, for example `feature 3`'s exponential transformation and resps conlumns (or other transforms).
+
 
 # Ideas and notes
 - Final sub: 1 with best public LB+CV, 1 experimental.

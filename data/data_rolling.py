@@ -74,9 +74,12 @@ class RunningEWMean:
     Reference: Lucas Morin
     https://www.kaggle.com/lucasmorin/running-algos-fe-for-fast-inference?scriptVersionId=50754012
     '''
-    def __init__(self, win_size=20, n_size = 1):
-        self.s = np.zeros(n_size)
-        self.past_value = 0
+    def __init__(self, win_size=20, n_size = 1, lt_mean = None):
+        if lt_mean is not None:
+            self.s = lt_mean
+        else:
+            self.s = np.zeros(n_size)
+        self.past_value = np.zeros(n_size)
         self.alpha = 2 /(win_size + 1)
 
     def clear(self):
@@ -84,8 +87,8 @@ class RunningEWMean:
 
     def push(self, x):
         
-        x = fast_fillna(x, self.past_value)
-        self.past_value = x
+        x = (x, self.past_value)
+        self.past_value = fast_fillna(x)
         self.s = self.alpha * x + (1 - self.alpha) * self.s
         
     def get_mean(self):

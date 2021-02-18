@@ -19,8 +19,8 @@ DATA_DIR = HOME+'/data/'
 
 from utils import *
 from utils_js import *
-from data.data_rolling import RunningPDA
-get_system()
+from data.data_rolling import RunningPDA, RunningEWMean, RunningMean
+
 # %%
 '''
 data preparation for the final submission

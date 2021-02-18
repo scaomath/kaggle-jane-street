@@ -704,7 +704,12 @@ def preprocess_pt(train_file, day_start=86,
     if drop_zero_weight:
         train = train[train['weight'] > 0].reset_index(drop = True)
     elif drop_zero_weight==False and zero_weight_thresh is not None:
-        train[['weight']] = train[['weight']].clip(zero_weight_thresh)
+        len_zero_weight = (train['weight'] == 0).sum()
+
+        # train[['weight']] = train[['weight']].clip(zero_weight_thresh)
+        
+        noise = zero_weight_thresh*np.random.rand(len_zero_weight)
+        train.loc[train['weight'] == 0, ['weight']] = noise.clip(0)
 
     # vanilla actions based on resp
     train['action'] = (train['resp'] > 0).astype(int)
