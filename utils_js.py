@@ -754,10 +754,10 @@ def preprocess_final(train_file, day_start=86, drop_days=None,
     for c in range(1,5):
         train['action_'+str(c)] = (train['resp_'+str(c)] > 0).astype(int)
 
-    train.fillna(train.mean(),inplace=True)
+    # train.fillna(train.mean(),inplace=True)
     
-    train['cross_41_42_43'] = train['feature_41'] + train['feature_42'] + train['feature_43']
-    train['cross_1_2'] = train['feature_1'] / (train['feature_2'] + 1e-5)
+    # train['cross_41_42_43'] = train['feature_41'] + train['feature_42'] + train['feature_43']
+    # train['cross_1_2'] = train['feature_1'] / (train['feature_2'] + 1e-5)
 
     if valid_days is not None and training_days is not None:
         valid = train.loc[train.date.isin(valid_days)].reset_index(drop=True)

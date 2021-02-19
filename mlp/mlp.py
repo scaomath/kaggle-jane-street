@@ -120,6 +120,58 @@ class ResidualMLP(nn.Module):
 
         return x
 
+class ResidualMLPLite(nn.Module):
+    def __init__(self, hidden_size=256, 
+                       output_size=len(target_cols), 
+                       input_size=len(all_feat_cols),
+                       dropout_rate=0.2):
+        super(ResidualMLPLite, self).__init__()
+        self.batch_norm0 = nn.BatchNorm1d(input_size)
+        self.dropout0 = nn.Dropout(0.2)
+
+        self.dense1 = nn.Linear(input_size, hidden_size)
+        self.batch_norm1 = nn.BatchNorm1d(hidden_size)
+        self.dropout1 = nn.Dropout(dropout_rate)
+
+        self.dense2 = nn.Linear(hidden_size+input_size, hidden_size)
+        self.batch_norm2 = nn.BatchNorm1d(hidden_size)
+        self.dropout2 = nn.Dropout(dropout_rate)
+
+        self.dense3 = nn.Linear(hidden_size+hidden_size, hidden_size)
+        self.batch_norm3 = nn.BatchNorm1d(hidden_size)
+        self.dropout3 = nn.Dropout(dropout_rate)
+
+        self.dense4 = nn.Linear(hidden_size+hidden_size, output_size)
+
+        self.LeakyReLU = nn.LeakyReLU(negative_slope=0.01, inplace=True)
+
+    def forward(self, x):
+        x = self.batch_norm0(x)
+        x = self.dropout0(x)
+
+        x1 = self.dense1(x)
+        x1 = self.batch_norm1(x1)
+        x1 = self.LeakyReLU(x1)
+        x1 = self.dropout1(x1)
+
+        x = torch.cat([x, x1], 1)
+
+        x2 = self.dense2(x)
+        x2 = self.batch_norm2(x2)
+        x2 = self.LeakyReLU(x2)
+        x2 = self.dropout2(x2)
+
+        x = torch.cat([x1, x2], 1)
+
+        x3 = self.dense3(x)
+        x3 = self.batch_norm3(x3)
+        x3 = self.LeakyReLU(x3)
+        x3 = self.dropout3(x3)
+
+        x = torch.cat([x2, x3], 1)
+
+        x = self.dense4(x)
+        return x
 
 class MLP(nn.Module):
     def __init__(self, hidden_units=hidden_units,

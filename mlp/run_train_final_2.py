@@ -27,35 +27,38 @@ Training script (excluding volatile days):
 DEBUG = False
 LOAD_PRETRAIN = False
 TRAINING_START = 0 
-FINETUNE_BATCH_SIZE = 2048_00
+FINETUNE_BATCH_SIZE = 4096_00
 BATCH_SIZE = 8192
 EPOCHS = 120
-LEARNING_RATE = 1e-4
+FINETUNE_EPOCHS = 2
+LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-4
 EARLYSTOP_NUM = 20
 NFOLDS = 1
 SCALING = 12
 THRESHOLD = 0.5
-CV_THRESH = 6000
+CV_THRESH = 1300
 DAYS_TO_DROP = list(range(86))+[270, 294]
 VOLATILE_DAYS = [1, 3, 4, 5, 8, 9, 12, 16, 17, 18, 23, 24, 26, 27, 30, 31, 32, 37, 38, 
                  41, 43, 44, 45, 46, 47, 59, 63, 69, 80, 85, 161, 168, 185, 196, 223, 231, 235, 
                  262, 274, 276, 283, 324, 346, 353, 354, 356, 379, 380, 382, 393, 394, 427, 438, 
                  452, 454, 459, 462, 468, 475, 488, 489, 491, 492, 495]
 
+_fold = 3
 SEED = 1127802
-get_seed(SEED)
+get_seed(SEED+SEED*_fold)
 
 resp_cols = ['resp_1','resp_2', 'resp_3','resp', 'resp_4']
 resp_cols_all = resp_cols
 target_cols = ['action_1','action_2','action_3', 'action', 'action_4']
 feat_cols = [f'feature_{i}' for i in range(130)]
-feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
+# feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
 
 ###### adding weight to the features #######
 # feat_cols.extend(['weight'])
 
 util_cols =['resp_1','resp_2', 'resp_3','resp', 'resp_4']
+# util_cols =['resp_3','resp', 'resp_4']
 resp_index = [resp_cols_all.index(r) for r in util_cols]
 
 
@@ -77,8 +80,9 @@ train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_wo
 valid_set = ExtendedMarketDataset(valid, features=feat_cols, targets=target_cols, resp=resp_cols)
 valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
 
-model = ResidualMLP(input_size=len(feat_cols), hidden_size=256, output_size=len(target_cols))
+model = ResidualMLP(input_size=len(feat_cols), hidden_size=192, output_size=len(target_cols))
 # model = MLP(hidden_units=(None,160,160,160), input_dim=len(feat_cols), output_dim=len(target_cols))
+# model = ResidualMLPLite(input_size=len(feat_cols), hidden_size=256, output_size=len(target_cols))
 model.to(device)
 summary(model, input_size=(len(feat_cols), ))
 # %%
@@ -87,25 +91,23 @@ regularizer = UtilityLoss(alpha=5e-2, scaling=SCALING, normalize=None, resp_inde
 loss_fn = SmoothBCEwLogits(smoothing=0.005)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
-                                                                 T_0=10, T_mult=2, 
-                                                                 eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
-# scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE, 
-#                                                 steps_per_epoch=len(train_loader), epochs=EPOCHS)
+# scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
+#                                                                  T_0=10, T_mult=2, 
+#                                                                  eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
+scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE, 
+                                                steps_per_epoch=len(train_loader), epochs=EPOCHS)
 
 finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=10)
 
-finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-4)
+finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
 early_stop = EarlyStopping(patience=EARLYSTOP_NUM, mode="max", save_threshold=CV_THRESH)
 # %%
-_fold = 4
-SEED = 1127802
-get_seed(SEED+SEED*_fold)
 
+get_seed(SEED+SEED*_fold)
 for epoch in range(EPOCHS):
 
-    train_loss = train_epoch(model, optimizer, scheduler, loss_fn, train_loader, device)
-    # train_loss = train_epoch_weighted(model, optimizer, scheduler, loss_fn, train_loader, device)
+    # train_loss = train_epoch(model, optimizer, scheduler, loss_fn, train_loader, device)
+    train_loss = train_epoch_weighted(model, optimizer, scheduler, loss_fn, train_loader, device)
     # scheduler.step()
     lr = optimizer.param_groups[0]['lr']
     if (epoch+1) % 5 == 0:
@@ -120,6 +122,13 @@ for epoch in range(EPOCHS):
     early_stop(epoch, valid_auc, model, 
                model_path=model_file,
                epoch_utility_score=valid_score)
+
+    if early_stop.model_saved:
+        for g in optimizer.param_groups:
+            g['lr'] *= 0.1
+        lr = optimizer.param_groups[0]['lr']
+        tqdm.write(f"\nNew learning rate: {lr[-1]:.4e}")
+
     tqdm.write(f"\n[Epoch {epoch+1}/{EPOCHS}] \t Fold {_fold}")
     tqdm.write(f"Train loss: {train_loss:.4e} \t Current learning rate: {lr:.4e}")
     tqdm.write(f"Best util: {early_stop.best_utility_score:.2f} at epoch {early_stop.best_epoch} \t {early_stop.message} ")
@@ -127,6 +136,9 @@ for epoch in range(EPOCHS):
     if early_stop.early_stop:
         print("\nEarly stopping")
         break
+
+for epoch in range(FINETUNE_EPOCHS):
+    pass
 
 if DEBUG:
     torch.save(model.state_dict(), MODEL_DIR + f"/model_{_fold}.pth")
