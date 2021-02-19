@@ -494,7 +494,9 @@ class UtilityLoss(nn.Module):
         return loss
 
 class EarlyStopping:
-    def __init__(self, patience=7, mode="max", delta=0.0, monitor='utility', save_threshold=5000):
+    def __init__(self, patience=7, mode="max", delta=0.0, 
+                       monitor='utility', 
+                       save_threshold=5000,):
         self.patience = patience
         self.counter = 0
         self.mode = mode
@@ -510,6 +512,7 @@ class EarlyStopping:
             self.val_score = -np.Inf
         self.message = None
         self.save_threshold = save_threshold
+        self.model_saved = False
         
 
     def __call__(self, epoch, epoch_score, model, model_path, epoch_utility_score):
@@ -525,6 +528,7 @@ class EarlyStopping:
                 self.best_utility_score = util_score
                 self.best_epoch = epoch
             elif util_score < self.best_utility_score:
+                self.model_saved = False
                 self.counter += 1
                 self.message = f'EarlyStopping counter: {self.counter} out of {self.patience}'
                 if self.counter >= self.patience: # a harder offset
@@ -532,8 +536,12 @@ class EarlyStopping:
             else:
                 self.message = f'Utility score :({self.best_utility_score:.2f} --> {util_score:.2f}).'
                 if util_score > self.save_threshold:
+                    self.model_saved = True
                     self.message += " model saved."
                     self.save_checkpoint(epoch_score, model, model_path)
+                    
+                else:
+                    self.model_saved = False
                 self.best_utility_score = util_score
                 self.counter = 0
                 self.best_epoch = epoch
@@ -600,7 +608,7 @@ def train_epoch_cat(model, optimizer, scheduler, loss_fn, dataloader, device):
     len_data = len(dataloader)
 
     with tqdm(total=len_data) as pbar:
-        for data in dataloader:
+        for i, data in enumerate(dataloader):
             optimizer.zero_grad()
             features = data['features'].to(device)
             cat_features = data['cat_features'].to(device)
@@ -615,12 +623,59 @@ def train_epoch_cat(model, optimizer, scheduler, loss_fn, dataloader, device):
 
             final_loss += loss.item()
             lr = optimizer.param_groups[0]['lr']
-            pbar.set_description(f'learning rate: {lr:.5e}')
+            pbar.set_description(f'train loss: {final_loss/(i+1):.6f} learning rate: {lr:.5e}')
             pbar.update()
 
     final_loss /= len(dataloader)
 
     return final_loss
+
+
+def train_epoch_ft_cat(model, optimizer, scheduler, regularizer, dataloader, device, 
+                         loss_fn=None):
+    model.train()
+    utils_loss = 0
+    train_loss = 0
+    len_data = len(dataloader)
+    _loss = None
+
+    with tqdm(total=len_data) as pbar:
+        for i, data in enumerate(dataloader):
+            optimizer.zero_grad()
+            features = data['features'].to(device)
+            cat_features = data['cat_features'].to(device)
+            label = data['label'].to(device)
+            weight = data['weight'].to(device)
+            resp = data['resp'].to(device)
+            date = data['date'].to(device)
+            outputs = model(features, cat_features)
+            loss = regularizer(outputs, resp, weights=weight, date=date)
+
+            if loss.item() < 0:
+                utils_loss += -loss.item()
+            else:
+                utils_loss += loss.item()
+
+            if loss_fn is not None:
+                _loss = loss_fn(outputs, label)
+                loss += _loss
+
+            loss.backward()
+            optimizer.step()
+            if scheduler:
+                scheduler.step()
+            
+            if _loss is not None:
+                train_loss += _loss.item()
+                desc = f"Train loss: {train_loss/(i+1):.8f} \t" 
+                desc += f"Fine-tuning {regularizer.__class__.__name__} loss: {utils_loss/(i+1):.4e}"
+                pbar.set_description(desc)
+            else:
+                desc = f"Fine-tuning {regularizer.__class__.__name__} loss: {utils_loss/(i+1):.4e}"
+                pbar.set_description(desc)
+            pbar.update()
+
+    return utils_loss
 
 def train_epoch_weighted(model, optimizer, scheduler, loss_fn, dataloader, device):
     model.train()
