@@ -31,9 +31,9 @@ FINETUNE_BATCH_SIZE = 4096_00
 BATCH_SIZE = 8192
 EPOCHS = 160
 FINETUNE_EPOCHS = 2
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-4
-EARLYSTOP_NUM = 40
+EARLYSTOP_NUM = 20
 NFOLDS = 1
 SCALING = 12
 THRESHOLD = 0.5
@@ -44,11 +44,11 @@ VOLATILE_DAYS = [1, 3, 4, 5, 8, 9, 12, 16, 17, 18, 23, 24, 26, 27, 30, 31, 32, 3
                  262, 274, 276, 283, 324, 346, 353, 354, 356, 379, 380, 382, 393, 394, 427, 438, 
                  452, 454, 459, 462, 468, 475, 488, 489, 491, 492, 495]
 
-_fold = 0
+_fold = 2
 SEED = 1127802
 get_seed(SEED+SEED*_fold)
 
-resp_cols = ['resp_1','resp_2', 'resp_3','resp', 'resp_4']
+resp_cols = ['resp_1', 'resp_2', 'resp_3','resp', 'resp_4']
 resp_cols_all = resp_cols
 target_cols = ['action_1','action_2','action_3', 'action', 'action_4']
 feat_cols = [f'feature_{i}' for i in range(130)]
@@ -73,6 +73,16 @@ with timer("Preprocessing train"):
                                     drop_days=DAYS_TO_DROP,
                                     drop_zero_weight=True, denoised_resp=False)
 
+#%%
+# feat_spike_index = [1, 2, 3, 4, 5, 6, 10, 14, 16, 69, 70, 71, 73, 74, 75, 76, 79, 80, 81, 82, 85,
+#                     86, 87, 88, 91, 92, 93, 94, 97, 98, 99, 100, 103, 104, 105, 106, 109, 111, 112, 115, 117, 118]
+# feat_reg_index = list(set(range(130)).difference(feat_spike_index))
+# features_reg = [f'feature_{i}' for i in feat_reg_index]
+# features_spike = [f'feature_{i}' for i in feat_spike_index]
+# spike_fillna_val = np.load(DATA_DIR+'fillna_val_spike_feats.npy').astype(np.float32)
+# train[feat_cols[:-2]] = train[feat_cols[:-2]] - spike_fillna_val
+# valid[feat_cols[:-2]] = valid[feat_cols[:-2]] - spike_fillna_val
+
 # %%
 train_set = ExtendedMarketDataset(train, features=feat_cols, targets=target_cols, resp=resp_cols)
 train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
@@ -90,15 +100,21 @@ regularizer = UtilityLoss(alpha=5e-2, scaling=SCALING, normalize=None, resp_inde
 
 loss_fn = SmoothBCEwLogits(smoothing=0.005)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-# scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
-#                                                                  T_0=10, T_mult=2, 
-#                                                                  eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
-scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE, 
-                                                steps_per_epoch=len(train_loader), epochs=EPOCHS)
+optimizer = torch.optim.Adam(model.parameters(), 
+                             lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY,)
+
+scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
+                                                                 T_0=5, T_mult=2, 
+                                                                 eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
+# scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-8)
+# scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE, 
+#                                                 steps_per_epoch=len(train_loader), epochs=EPOCHS)
+
 # scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=LEARNING_RATE*1e-2, 
 #                                              max_lr=LEARNING_RATE, step_size_up=5, 
 #                                              mode="triangular2")
+scheduler_add = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[7,20,39], gamma=0.1)
+# scheduler_add = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.8)
 
 finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=10)
 
@@ -111,7 +127,7 @@ for epoch in range(EPOCHS):
 
     # train_loss = train_epoch(model, optimizer, scheduler, loss_fn, train_loader, device)
     train_loss = train_epoch_weighted(model, optimizer, scheduler, loss_fn, train_loader, device)
-    # scheduler.step()
+    scheduler_add.step()
     lr = optimizer.param_groups[0]['lr']
     # if (epoch+1) % 5 == 0:
     #     _ = train_epoch_finetune(model, finetune_optimizer, scheduler,
@@ -126,11 +142,11 @@ for epoch in range(EPOCHS):
                model_path=model_file,
                epoch_utility_score=valid_score)
 
-    if early_stop.best_utility_score > CV_THRESH:
-        for g in optimizer.param_groups:
-            g['lr'] *= 0.1
-        lr = optimizer.param_groups[0]['lr']
-        print(f"\nNew learning rate: {lr:.4e}")
+    # if early_stop.model_saved:
+    #     for g in optimizer.param_groups:
+    #         g['lr'] *= 0.1
+    #     lr = optimizer.param_groups[0]['lr']
+    #     print(f"\nNew learning rate: {lr:.4e}")
 
     tqdm.write(f"\n[Epoch {epoch+1}/{EPOCHS}] \t Fold {_fold}")
     tqdm.write(f"Train loss: {train_loss:.4e} \t Current learning rate: {lr:.4e}")
@@ -140,9 +156,18 @@ for epoch in range(EPOCHS):
         print("\nEarly stopping")
         break
 
+#%%
 for epoch in range(FINETUNE_EPOCHS):
-    _ = train_epoch_finetune(model, finetune_optimizer, scheduler,
+    util_loss, train_loss = train_epoch_finetune(model, finetune_optimizer, scheduler,
                                  regularizer, finetune_loader, device, loss_fn=loss_fn)
+
+    valid_pred = valid_epoch(model, valid_loader, device)
+    valid_auc, valid_score = get_valid_score(valid_pred, valid,
+                                             f=median_avg, threshold=0.5, target_cols=target_cols)
+
+    print(f"\n[Finetune epoch {epoch+1}/{FINETUNE_EPOCHS}] \t Fold {_fold}")
+    print(f"Train loss: {train_loss:.4e} \t Util score: {util_loss:.2f}")
+    print(f"Valid utility: {valid_score:.2f} \t Valid AUC: {valid_auc:.4f}\n")
 
 if DEBUG:
     torch.save(model.state_dict(), MODEL_DIR + f"/model_{_fold}.pth")

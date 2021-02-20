@@ -729,10 +729,11 @@ def train_epoch_ft_cat(model, optimizer, scheduler, regularizer, dataloader, dev
 
     return utils_loss
 
-def train_epoch_weighted(model, optimizer, scheduler, loss_fn, dataloader, device):
+def train_epoch_weighted(model, optimizer, scheduler, loss_fn, dataloader, device, max_grad_norm=2):
     model.train()
     final_loss = 0
     len_data = len(dataloader)
+    one_cycle_scheduler = (scheduler is not None and 'OneCycleLR' in str(scheduler.__class__))
 
     with tqdm(total=len_data) as pbar:
         for data in dataloader:
@@ -746,14 +747,21 @@ def train_epoch_weighted(model, optimizer, scheduler, loss_fn, dataloader, devic
             outputs = model(features)
             loss = loss_fn(outputs, label, weights=weights)
             loss.backward()
+
+            if max_grad_norm:
+                nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+
             optimizer.step()
-            if scheduler:
+            if one_cycle_scheduler:
                 scheduler.step()
 
             final_loss += loss.item()
             lr = optimizer.param_groups[0]['lr']
             pbar.set_description(f'learning rate: {lr:.5e}')
             pbar.update()
+    
+    if not one_cycle_scheduler:
+        scheduler.step()
 
     final_loss /= len(dataloader)
 
@@ -843,7 +851,7 @@ def train_epoch_finetune(model, optimizer, scheduler, regularizer, dataloader, d
                 pbar.set_description(desc)
             pbar.update()
 
-    return utils_loss
+    return utils_loss, train_loss
 
 def valid_epoch(model, dataloader, device, cat_input=False):
     model.eval()
@@ -905,7 +913,7 @@ def print_all_valid_score(df, model, start_day=100, num_days=50,
         valid_pred = valid_epoch(model, valid_loader, device)
         valid_auc, valid_score = get_valid_score(valid_pred, _valid, f=f, threshold=threshold, target_cols=target_cols)
         print(
-            f"Day {_day:3d}-{_day+num_days-1:3d}: valid_utility:{valid_score:.2f} \t valid_auc:{valid_auc:.4f}")
+            f"Day {_day:3d}-{_day+num_days-1:3d}: util score:{valid_score:.2f} \t auc:{valid_auc:.4f}")
         all_score.append(valid_score)
     print(f"\nDay {start_day}-{500}" )
     print(f"Utility score: {sum(all_score):.2f} ")
