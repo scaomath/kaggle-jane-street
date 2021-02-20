@@ -729,7 +729,7 @@ def train_epoch_ft_cat(model, optimizer, scheduler, regularizer, dataloader, dev
 
     return utils_loss
 
-def train_epoch_weighted(model, optimizer, scheduler, loss_fn, dataloader, device, max_grad_norm=2):
+def train_epoch_weighted(model, optimizer, scheduler, loss_fn, dataloader, device, max_grad_norm=10):
     model.train()
     final_loss = 0
     len_data = len(dataloader)
@@ -760,7 +760,7 @@ def train_epoch_weighted(model, optimizer, scheduler, loss_fn, dataloader, devic
             pbar.set_description(f'learning rate: {lr:.5e}')
             pbar.update()
     
-    if not one_cycle_scheduler:
+    if not one_cycle_scheduler and scheduler:
         scheduler.step()
 
     final_loss /= len(dataloader)

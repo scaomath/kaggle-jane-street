@@ -18,3 +18,4 @@ nn/ae_mlp_1127/untitled_project/
 *.feather
 *.npy
 *.h5
+.ipynb_checkpoints/

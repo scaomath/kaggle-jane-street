@@ -90,67 +90,102 @@ class RunningPDA:
             return False
         return (self.end_value - self.start_value) / (self.end - self.start) < self.slope
 
-class RunningEWMean:
+class RunningEWMeanDay:
     '''
     Reference: Lucas Morin
     https://www.kaggle.com/lucasmorin/running-algos-fe-for-fast-inference?scriptVersionId=50754012
+    Modified to do the rolling mean only intraday
     '''
-    def __init__(self, win_size=20, n_size = 1, lt_mean = None):
+    def __init__(self, window=20, num_feat = 1, lt_mean = None):
         if lt_mean is not None:
             self.s = lt_mean
         else:
-            self.s = np.zeros(n_size)
-        self.past_value = np.zeros(n_size)
-        self.alpha = 2 /(win_size + 1)
+            self.s = np.zeros(num_feat)
+        self.past_value = np.zeros(num_feat)
+        self.alpha = 2 /(window + 1)
+        self.day = -1
 
     def clear(self):
         self.s = 0
 
-    def push(self, x):
+    def push(self, x, date):
         
-        x = (x, self.past_value)
-        self.past_value = fast_fillna(x)
-        self.s = self.alpha * x + (1 - self.alpha) * self.s
+        x = fast_fillna(x, self.past_value)
+        self.past_value = x
+
+        if date > self.day:
+            self.day = date
+            self.clear()
+            self.s = x
+        else:
+            self.s = self.alpha * x + (1 - self.alpha) * self.s
         
     def get_mean(self):
         return self.s
 
 
-class RunningMean:
-    def __init__(self, win_size=20, n_size = 1):
+class RunningMeanDay:
+    '''
+    Reference: Lucas Morin
+    https://www.kaggle.com/lucasmorin/running-algos-fe-for-fast-inference?scriptVersionId=50754012
+    Modified to do the rolling mean only intraday
+    '''
+    def __init__(self, window=1000, num_feat = 1):
+        self.day = -1
         self.n = 0
-        self.mean = np.zeros(n_size)
-        self.n_size=n_size
-        self.cum_sum = 0
+        self.mean = 0
+        self.run_var = 0
+        self.window = window
         self.past_value = 0
-        self.win_size = win_size
-        self.windows = collections.deque(maxlen=win_size+1)
-        
+        self.windows = deque(maxlen=window+1)
+        self.num_feat=num_feat
+
     def clear(self):
         self.n = 0
         self.windows.clear()
 
-    def push(self, x):
+    def push(self, x, date):
         
         x = fast_fillna(x, self.past_value)
         self.past_value = x
-        
-        self.windows.append(x)
-        self.cum_sum += x
-        
-        if self.n < self.win_size:
-            self.n += 1
-            self.mean = self.cum_sum / float(self.n)
-            
+
+        if date > self.day:
+            self.day = date
+            self.clear()
+            self.windows.append(x)
+            self.n = 1
+            self.mean = x
+            self.run_var = 0
         else:
-            self.cum_sum -= self.windows.popleft()
-            self.mean = self.cum_sum / float(self.win_size)
+            self.windows.append(x)
+
+            if self.n < self.window:
+                # Calculating first variance
+                self.n += 1
+                delta = x - self.mean
+                self.mean += delta / self.n
+                self.run_var += delta * (x - self.mean)
+            else:
+                # Adjusting variance
+                x_removed = self.windows.popleft()
+                old_m = self.mean
+                self.mean += (x - x_removed) / self.window
+                self.run_var += (x + x_removed - old_m - self.mean) * (x - x_removed)
 
     def get_mean(self):
-        return self.mean if self.n else np.zeros(self.n_size)
+        return self.mean if self.n else np.zeros(self.num_feat)
+
+    def get_var(self):
+        return self.run_var / (self.n) if self.n > 1 else np.zeros(self.num_feat)
+
+    def get_std(self):
+        return math.sqrt(self.get_var())
+
+    def get_all(self):
+        return list(self.windows)
 
     def __str__(self):
-        return f"Current window values: {list(self.windows)}"
+        return "Current window values: {}".format(list(self.windows))
 
 
 #%%

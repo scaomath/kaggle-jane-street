@@ -704,12 +704,11 @@ def preprocess_pt(train_file, day_start=86,
     if drop_zero_weight:
         train = train[train['weight'] > 0].reset_index(drop = True)
     elif drop_zero_weight==False and zero_weight_thresh is not None:
-        len_zero_weight = (train['weight'] == 0).sum()
-
-        # train[['weight']] = train[['weight']].clip(zero_weight_thresh)
-        
-        noise = zero_weight_thresh*np.random.rand(len_zero_weight)
-        train.loc[train['weight'] == 0, ['weight']] = noise.clip(0)
+        index_zero_weight =  (train['weight']==0)
+        index_zero_weight = np.where(index_zero_weight)[0]
+        index_zero_weight = np.random.choice(index_zero_weight, size=int(0.4*len(index_zero_weight)))
+        train.loc[index_zero_weight, ['weight']] = train.loc[index_zero_weight, ['weight']].clip(zero_weight_thresh)
+        train = train[train['weight'] > 0].reset_index(drop = True)
 
     # vanilla actions based on resp
     train['action'] = (train['resp'] > 0).astype(int)
@@ -743,6 +742,7 @@ def preprocess_final(train_file,
         index_zero_weight = np.where(index_zero_weight)[0]
         index_zero_weight = np.random.choice(index_zero_weight, size=int(0.4*len(index_zero_weight)))
         train.loc[index_zero_weight, ['weight']] = train.loc[index_zero_weight, ['weight']].clip(zero_weight_thresh)
+        train = train[train['weight'] > 0].reset_index(drop = True)
 
     # vanilla actions based on resp
     train['action'] = (train['resp'] > 0).astype(int)
