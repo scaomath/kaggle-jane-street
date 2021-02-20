@@ -562,7 +562,7 @@ class EarlyStopping:
             self.val_score = np.Inf
         else:
             self.val_score = -np.Inf
-        self.message = None
+        self.message = " "
         self.save_threshold = save_threshold
         self.model_saved = False
         
@@ -591,9 +591,9 @@ class EarlyStopping:
                     self.model_saved = True
                     self.message += " model saved."
                     self.save_checkpoint(epoch_score, model, model_path)
-                    
                 else:
                     self.model_saved = False
+                    
                 self.best_utility_score = util_score
                 self.counter = 0
                 self.best_epoch = epoch
@@ -928,3 +928,5 @@ if __name__ == '__main__':
     except ImportError as e:
         print(f"{str(datetime.datetime.now())} Import error {e}")
 
+
+# %%

@@ -22,28 +22,37 @@ from utils_js import *
 Past day mean
 Reference: Lucas Morin's notebook
 https://www.kaggle.com/lucasmorin/running-algos-fe-for-fast-inference?scriptVersionId=50754012
+
+Modified by Shuhao Cao and Ethan Zheng to 
+1. able to return past day trading numbers.
+2. able to use feature 64 to predict whether a day is ''busy''
+
 '''
+
 
 class RunningPDA:
     '''
-    Past day mean
-    Reference: Lucas Morin
     https://www.kaggle.com/lucasmorin/running-algos-fe-for-fast-inference?scriptVersionId=50754012
     '''
-    def __init__(self, past_mean=0):
+    def __init__(self, past_mean=0, start=1000, end=2500, slope=0.00116):
         self.day = -1
         self.past_mean = past_mean # past day mean, initialized as the mean
         self.cum_sum = 0
         self.day_instances = 0 # current day instances
         self.past_value = past_mean # the previous row's value, initialized as the mean
-        self.past_instances =0 # instances in the past day
+        self.past_instances = 0 # instances in the past day
+        
+        self.start = start
+        self.end = end
+        self.slope = slope
+        self.start_value = None
+        self.end_value = None
 
     def clear(self):
         self.n = 0
         self.windows.clear()
 
     def push(self, x, date):
-        
         x = fast_fillna(x, self.past_value)
         self.past_value = x
         
@@ -56,9 +65,16 @@ class RunningPDA:
             self.day_instances = 1
             self.cum_sum = x
             
+            self.start_value, self.end_value = None, None
+            
         else:
             self.day_instances += 1
             self.cum_sum += x
+        
+        if self.day_instances == self.start:
+            self.start_value = x[:, 64]
+        if self.day_instances == self.end:
+            self.end_value = x[:, 64]
 
     def get_mean(self):
         return self.cum_sum/self.day_instances
@@ -68,6 +84,11 @@ class RunningPDA:
 
     def get_past_trade(self):
         return self.past_instances
+    
+    def predict_today_busy(self):
+        if self.start_value is None or self.end_value is None:
+            return False
+        return (self.end_value - self.start_value) / (self.end - self.start) < self.slope
 
 class RunningEWMean:
     '''
