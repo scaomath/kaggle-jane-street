@@ -728,26 +728,21 @@ def preprocess_pt(train_file, day_start=86,
     else:
         return train
 
-def preprocess_final(train_file, day_start=86, drop_days=None,
-                  drop_zero_weight=True, zero_weight_thresh=1e-7, 
-                  training_days=None, valid_days=None,
-                  denoised_resp=False, num_dn_target=1):
+def preprocess_final(train_file,
+                  drop_zero_weight=True, zero_weight_thresh=1e-6, 
+                  training_days=None, valid_days=None):
     try:
         train = pd.read_parquet(train_file)
     except:
         train = pd.read_feather(train_file)
-    train = train.loc[train.date >= day_start].reset_index(drop=True)
-
-    if drop_days:
-        train = train.query(f'date not in {drop_days}').reset_index(drop = True)
-    
-    if denoised_resp:
-        train = add_denoised_target(train, num_dn_target=num_dn_target)
 
     if drop_zero_weight:
         train = train[train['weight'] > 0].reset_index(drop = True)
     elif drop_zero_weight==False and zero_weight_thresh is not None:
-        train[['weight']] = train[['weight']].clip(zero_weight_thresh)
+        index_zero_weight =  (train['weight']==0)
+        index_zero_weight = np.where(index_zero_weight)[0]
+        index_zero_weight = np.random.choice(index_zero_weight, size=int(0.4*len(index_zero_weight)))
+        train.loc[index_zero_weight, ['weight']] = train.loc[index_zero_weight, ['weight']].clip(zero_weight_thresh)
 
     # vanilla actions based on resp
     train['action'] = (train['resp'] > 0).astype(int)

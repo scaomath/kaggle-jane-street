@@ -344,7 +344,10 @@ print("Number of volatile days",volatile_days.count())
 filter_list    = volatile_days.index.to_list()
 
 #%%
-filter_list = [1,   4,   5,  12,  16,  18,  24,  37,  38,  43,  44,  45,  47,
+filter_list = [1,  4,  5,  12,  16,  18,  24,  37,  38,  43,  44,  45,  47,
              59,  63,  80,  85, 161, 168, 452, 459, 462]
 train_final_regular = train_final.query('date != @filter_list').reset_index(drop = True)
+train_final_regular = train_final.query('date >85').reset_index(drop = True)
+# %%
+train_final_regular.to_parquet(os.path.join(DATA_DIR, 'train_final_regular.parquet'), index=False)
 # %%

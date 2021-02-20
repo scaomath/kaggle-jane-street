@@ -67,11 +67,10 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # %%
 with timer("Preprocessing train"):
-    train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
-    train, valid = preprocess_final(train_parquet, day_start=TRAINING_START, 
+    train_parquet = os.path.join(DATA_DIR, 'train_final_regular.parquet')
+    train, valid = preprocess_final(train_parquet, 
                                     training_days=range(0,470), valid_days=range(475, 500),
-                                    drop_days=DAYS_TO_DROP,
-                                    drop_zero_weight=True, denoised_resp=False)
+                                    drop_zero_weight=False, zero_weight_thresh=1e-6)
 
 #%%
 # feat_spike_index = [1, 2, 3, 4, 5, 6, 10, 14, 16, 69, 70, 71, 73, 74, 75, 76, 79, 80, 81, 82, 85,
@@ -113,7 +112,7 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
 # scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=LEARNING_RATE*1e-2, 
 #                                              max_lr=LEARNING_RATE, step_size_up=5, 
 #                                              mode="triangular2")
-scheduler_add = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[7,20,39], gamma=0.1)
+scheduler_add = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10,20,39], gamma=0.1)
 # scheduler_add = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.8)
 
 finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=10)
