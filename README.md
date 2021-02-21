@@ -3,54 +3,55 @@
 # Team: Semper Augustus
 [Shuhao Cao](https://scaomath.github.io), [Carl McBride Ellis](http://www.sklogwiki.org/SklogWiki/carlmcbride.html), [Ethan Zheng](https://www.tzheng.org)
 
-# Final submission
+# Final submissions
 
 ## Data
+500 days of high frequency trading data from Jane Street.
 
-3. All data: only drop the two partial days and the two <2k `ts_id` days (done first).
+0. All data: only drop the two partial days and the two <2k `ts_id` days (done first).
 1. `fillna()` past day mean including all weight zero rows. 
-2. Most common values `fillna` for spike features rows.
-4. Smoother data: aside from 1, query day > 85, drop `ts_id` > 8700 days.
-5. Final training uses only `weight > 0` rows, but with a randomly
-selected 40% of weight zero rows' weight being replaced by 1e-7 to
-reduce overfitting.
-6. A new de-noised target is generated with all five targets.
+2. ~~Most common values `fillna` for spike features rows.~~ (not any more after categorical embedding)
+4. Smoother data: aside from 1, query day > 85, drop `ts_id` > 9000 days.
+5. Final training uses only `weight > 0` rows, ~~with a randomly selected 40% of weight zero rows' weight being replaced by 1e-7 to reduce overfitting~~ (reduces CV so discarded).
+6. ~~A new de-noised target is generated with all five targets~~ (CV too good but leaderboard bad).
 
-## Splits
-`PurgedGroupCV`, day gap = 5, last three folds.
+### Splits
+A group CV based on days, day gap = 10, three folds.
+```python
+splits = {
+          'train_days': (range(0,457), range(0,424), range(0,391)),
+          'valid_days': (range(467, 500), range(434, 466), range(401, 433)),
+          }
+```
 
 ## Models
-- (PT) torch baseline with the skip connection mechanics, around 400k
-parameters, fast inference. Easy to get overfit though.
-- (AE+TF) Autoencoder + Tensorflow small MLP net with skip connection in
-the first layer. Small net. Currently the best scored public ones with
-a serious CV.
-- (TF) tensorflow Residual MLP using a filtering layer with high dropout rates to filter out hand-picked unimportant features suggested by Carl.
+- (PT) PyTorch baseline with the skip connection mechanics, around 400k parameters, fast inference. Easy to get overfit.
+- (S) Carl found that some features have an extremely high number of common values. Based on close inspection. I have a conjecture that they are certain categorical features' embedding. So this model is designed to add an embedding block for these features. Also with the skip connection mechanics, around 300k
+parameters, best local CV and best single model leaderboard score.
+- (AE) Tensorflow implementation of an autoencoder + a small MLP net with skip connection in the first layer. Small net. Currently the best scored public ones with a serious CV using 3 folds ensemble.
+- (TF) Tensorflow Residual MLP using a filtering layer with high dropout rates to filter out hand-picked unimportant features suggested by Carl.
 - (TF overfit) the infamous overfit model with a 1111 seed.
 
 ## Train
 1. Volatile models: all data with only `resp`, `resp_3`, `resp_4` as targets.
 2. Smoother models: smoother data with all five `resp`s.
-3. De-noised models: smoother data with all five `resp`s + a de-noised target.
-4. Optimizer is simply Adam with a cosine annealing scheduler that allow warm restarts.
-5. During training of torch models, a fine-tuning regularizer is applied each 10 epochs to maximize the utility function by choosing action being the sigmoid of the outputs (Only for torch models, I do not know how to incorporate this in `tensorflow` training, as tf's custom loss function is not that straightforward to keep track of extra inputs between batches).
+~~3. De-noised models: smoother data with all five `resp`s + a de-noised target~~.
+4. Optimizer is simply Adam with a cosine annealing scheduler that allow warm restarts. Rectified Adam for tensorflow models.
+5. During training of torch models, a fine-tuning regularizer is applied each 10 epochs to maximize the utility function by choosing action being the sigmoid of the outputs (Only for torch models, I do not know how to incorporate this in `tensorflow` training, as tensorflow's custom loss function is not that straightforward to keep track of extra inputs between batches).
 
 ## Submissions
-1. local best CV ones within a 5 seeds bag. We can afford 6 (PT)s, 3
-(AE+TF)s, and 1 (TF) ResNet.
-2. Trained with all data using the "public leaderboard as CV" epochs
-determined earlier, plus the infamous (TF overfit model).
+1. Local best CV ones within a three seeds bag. Final models: a set of `3(S) + 3(PT) + 3(AE) + 1(TF)`  for both smooth and volatile data.
+2. Trained with all data using the “public leaderboard as CV” epochs determined earlier, plus the infamous tensorflow seed 1111 overfit model.
 
 ## Inference 
-1. CPU inference because the submission is CPU-bounded rather GPU. Torch models are usually faster than TF even with numba backend enabled.
-2. Use `feature_64`'s average gradient (a scaled version of $\arcsin (t)$), and the number of trades in the previous day as a criterion to determine the models to include.
-3. Blending is always concat models in a bag then taking the middle 70%'s
-average, then concat again to take the middle 50% average. For
-example, if we have 5 (PT)s, 3 (AE+TF)s and 1 (TF), then 5 (PT)'s predictions
-are concat'ed and averaged along axis 0 with the middle three, and (AE+TF) submissions are taken the median. Lastly, the subs are concat'ed again to take the middle 50%'s average.
-4. Regular days:  5 (P), 1(P) with denoised target, 3 (AE+TF)s, and 1
-(TF) trained on the smoother models.
-5. Busy days: above models trained on all data, minus the denoised target one.
+1. CPU inference because the submission is CPU-bounded rather GPU. Torch models are usually faster than TF, TF models with `numba` backend enabled.
+2. (Main contribution of Semper Augustus) Use `feature_64`'s [average gradient (a scaled version of $\arcsin (t)$) suggest by Carl](https://www.kaggle.com/c/jane-street-market-prediction/discussion/208013#1135364), and the number of trades in the previous day as a criterion to determine the models to include. Reference: [slope test of the past day class by Ethan and iter_cv simulation written by Shuhao](https://www.kaggle.com/ztyreg/validate-busy-prediction), [slope validation](https://www.kaggle.com/ztyreg/validate-busy-prediction)
+3. Blending is always concatenating models in a bag then taking the middle 60%'s
+average (median if only 3 models), then concatenating again to take the middle 60% average (50% if a day is busy). For example, if we have `5 (PT) + 3 (AE) + 1 (TF)`, then `5 (PT)`'s predictions
+are concatenated and averaged along `axis 0` with the middle three, and `(AE)` submissions are taken the median. Lastly, the subs are concatenated again to take the middle 9 entries (15 total).
+4. Regular days: `3 (P)`, `3 (S)` ~~with denoised target~~, `3 (AE)`, and 1
+`(TF)` trained on the smoother models.
+1. Busy days: above models trained on all data.
 
 
 

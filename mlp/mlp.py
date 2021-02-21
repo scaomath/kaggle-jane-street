@@ -589,6 +589,7 @@ class EarlyStopping:
                     self.early_stop = True
             elif util_score >= self.best_utility_score-self.util_offset and util_score < self.best_utility_score:
                 self.model_saved = False
+                self.counter = 0
                 self.message = f'EarlyStopping counter: {self.counter} out of {self.patience}'
                 if self.counter >= self.patience: # a harder offset
                     self.early_stop = True

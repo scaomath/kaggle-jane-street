@@ -25,6 +25,7 @@ pd.set_option('display.max_columns', 100)
 Final model spikenet:
 
 1. subtract the most common values from columns with a spike in the histogram to form cat features.
+2. overfit models, trained on all data. Choose the 25 day span util scores' variation smallest ones. 
 '''
 
 
@@ -34,14 +35,14 @@ FINETUNE_BATCH_SIZE = 4096_00
 
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-5
-EPOCHS = 100
+EPOCHS = 60
 EARLYSTOP_NUM = 5
 ALPHA = 0.6
 EPSILON = 5e-2 # strength of the regularizer
-VOLATILE_MODEL = True
+VOLATILE_MODEL = False
 
-s = 4
-SEED = 1127*s
+s = 7
+SEED = 1127802*s
 np.random.seed(SEED)
 pd.core.common.random_state(SEED)
 torch.manual_seed(SEED)
@@ -52,21 +53,21 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed_all(SEED)
 
 splits = {
-          'train_days': (range(0,457), range(0,424), range(0,391)),
+          'train_days': (range(0,500), range(0,500), range(0,500)),
           'valid_days': (range(467, 500), range(434, 466), range(401, 433)),
           }
-fold = 2
+fold = 0
 
 if fold == 0:
-    SAVE_THRESH = 1300
-    VAL_OFFSET = 100
+    SAVE_THRESH = 3000
+    VAL_OFFSET = 150
 elif fold == 1:
-    SAVE_THRESH = 1200
+    SAVE_THRESH = 3000
     VAL_OFFSET = 150
 elif fold == 2:
-    SAVE_THRESH = 90
+    SAVE_THRESH = 1000
     VAL_OFFSET = 100
-    EPOCHS = 40
+    EPOCHS = 50
     LEARNING_RATE = 1e-3
     EPSILON = 1e-2
 
@@ -301,8 +302,13 @@ for epoch in range(EPOCHS):
     valid_pred = valid_epoch(model, valid_loader, device, cat_input=True)
     valid_auc, valid_score = get_valid_score(valid_pred, valid,
                                              f=median_avg, threshold=0.5, target_cols=target_cols)
-    model_file = MODEL_DIR + \
-        f"/emb_fold_{fold}_ep_{epoch}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
+    if VOLATILE_MODEL:
+        model_file = MODEL_DIR + \
+            f"/emb_volatile_overfit_fold_{fold}_ep_{epoch}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
+    else:
+        model_file = MODEL_DIR + \
+            f"/emb_overfit_fold_{fold}_ep_{epoch}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
+    
     early_stop(epoch, valid_auc, model, model_path=model_file,
                epoch_utility_score=valid_score)
 
