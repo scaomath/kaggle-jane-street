@@ -5,8 +5,8 @@
 
 # Final submissions
 
-## Data
-500 days of high frequency trading data from Jane Street.
+## Data preparation
+The data contain 500 days of high frequency trading data from Jane Street, total 2.4 million rows.
 
 0. All data: only drop the two partial days and the two <2k `ts_id` days (done first).
 1. `fillna()` past day mean including all weight zero rows. 
@@ -14,15 +14,6 @@
 4. Smoother data: aside from 1, query day > 85, drop `ts_id` > 9000 days.
 5. Final training uses only `weight > 0` rows, ~~with a randomly selected 40% of weight zero rows' weight being replaced by 1e-7 to reduce overfitting~~ (reduces CV so discarded).
 6. ~~A new de-noised target is generated with all five targets~~ (CV too good but leaderboard bad).
-
-### Splits
-A group CV based on days, day gap = 10, three folds.
-```python
-splits = {
-          'train_days': (range(0,457), range(0,424), range(0,391)),
-          'valid_days': (range(467, 500), range(434, 466), range(401, 433)),
-          }
-```
 
 ## Models
 - (PT) PyTorch baseline with the skip connection mechanics, around 400k parameters, fast inference. Easy to get overfit.
@@ -33,6 +24,16 @@ parameters, best local CV and best single model leaderboard score.
 - (TF overfit) the infamous overfit model with a 1111 seed.
 
 ## Train
+
+### Train-validation splits
+A grouped validation strategy based on a total of 100 days as validation, a 10-day gap between the last day of train and the first of valid, three folds.
+```python
+splits = {
+          'train_days': (range(0,457), range(0,424), range(0,391)),
+          'valid_days': (range(467, 500), range(434, 466), range(401, 433)),
+          }
+```
+
 1. Volatile models: all data with only `resp`, `resp_3`, `resp_4` as targets.
 2. Smoother models: smoother data with all five `resp`s.
 ~~3. De-noised models: smoother data with all five `resp`s + a de-noised target~~.
@@ -60,12 +61,12 @@ are concatenated and averaged along `axis 0` with the middle three, and `(AE)` s
 - [x] A simple starter.
 - [x] Stable CV-LB strategy (Updated Jan 22, now I think this is somehow impossible; updated Feb 12, certain correlation between the LB and the denoised target utility-finetuning around 70 epochs of ADAM).
 - [x] Writing a simple `iter_env` simulator.
-- [ ] Testing a moving average `fillna()` strategy in both train and inference pipeline.
-- [ ] Testing a past mean `fillna()`, fill the NaN using the mean only from prior day data, no intraday data.
+- [x] Testing a moving average `fillna()` strategy in both train and inference pipeline.
+- [x] Testing a past mean `fillna()`, fill the NaN using the mean only from prior day data, no intraday data.
 - [x] Using the `iter_env` simulator to test the impact of different threshold: 0.502 or 0.498 can be both better than 0.5? Need an explanation...
 - [ ] A table compiling what features will be using `ffill`, previous day mean, overall mean, etc (maybe not necessary?).
-- [ ] Trading frequency can be determined by number of trades per day, store this in a cache to choose model.
-- [ ] Using `feature_0` to choose models, and/or threshold (based on `feature_0`'s previous day count).
+- [x] Trading frequency can be determined by number of trades per day, store this in a cache to choose model.
+- [ ] Using `feature_0` to choose models, and/or threshold (based on `feature_0`'s previous day count?).
 - [x] Using rolling mean/exponential weighted mean of previous days as input/fillna, working out a submission pipeline.
 - [x] Implement a regularizer using the utility function.
 - [x] Train with all weights (maybe making `weight==0` rows' weights to certain small number `1e-5`), then train with all positive `weight` rows (slightly better public leaderboard).
@@ -73,7 +74,7 @@ are concatenated and averaged along `axis 0` with the middle three, and `(AE)` s
 - [x] Adding one or multiple de-noised targets by removing the eigenvalues of the covariance matrix.
 - [x] Train models including the first 85 days but excluding outlier days (high volatility days). For low volatile days, use the denoised models (?).
 - [x] Use public LB to do a variance test to determine whether the seed 1111 overfitting model can be used to do final submission. (weighted by 8 due to the total days factor) Public test 0-25:2565, 25-50:4131, 50-75:3156, 75-100:743; std=1234.
-- [ ] Testing the correlation between, for example `feature 3`'s exponential transformation and resps columns (or other transforms).
+- [x] Testing the correlation between, for example `feature 3`'s exponential weighted mean and `resp`s columns (or other transforms) (update Feb 21: both exponential moving averaging and windowed rolling mean do not help the CV).
 
 
 # Ideas and notes
