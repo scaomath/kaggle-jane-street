@@ -510,7 +510,7 @@ class UtilityLoss(nn.Module):
             inputs = inputs[..., self.resp_index]
             targets = targets[..., self.resp_index]
 
-        inputs = F.sigmoid(self.scaling*inputs)
+        inputs = torch.sigmoid(self.scaling*inputs)
         n_targets = len(self.resp_index)
         if n_targets > 1:
             weights = weights.repeat((n_targets, 1))
@@ -548,7 +548,8 @@ class UtilityLoss(nn.Module):
 class EarlyStopping:
     def __init__(self, patience=7, mode="max", delta=0.0, 
                        monitor='utility', 
-                       save_threshold=5000,):
+                       save_threshold=5000,
+                       util_offset=200):
         self.patience = patience
         self.counter = 0
         self.mode = mode
@@ -557,6 +558,7 @@ class EarlyStopping:
         self.best_epoch=0
         self.best_utility_score = None
         self.early_stop = False
+        self.util_offset = util_offset
         self.delta = delta
         if self.mode == "min":
             self.val_score = np.Inf
@@ -579,9 +581,14 @@ class EarlyStopping:
             if self.best_utility_score is None:
                 self.best_utility_score = util_score
                 self.best_epoch = epoch
-            elif util_score < self.best_utility_score:
+            elif util_score < self.best_utility_score-self.util_offset:
                 self.model_saved = False
                 self.counter += 1
+                self.message = f'EarlyStopping counter: {self.counter} out of {self.patience}'
+                if self.counter >= self.patience: # a harder offset
+                    self.early_stop = True
+            elif util_score >= self.best_utility_score-self.util_offset and util_score < self.best_utility_score:
+                self.model_saved = False
                 self.message = f'EarlyStopping counter: {self.counter} out of {self.patience}'
                 if self.counter >= self.patience: # a harder offset
                     self.early_stop = True

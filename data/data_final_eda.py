@@ -28,6 +28,12 @@ from utils_js import *
 train_parquet = os.path.join(DATA_DIR, 'train_final.parquet')
 train_final = pd.read_parquet(train_parquet)
 
+train_parquet = os.path.join(DATA_DIR, 'train_final_ver1.parquet')
+train_final_ver1 = pd.read_parquet(train_parquet)
+
+train_parquet = os.path.join(DATA_DIR, 'train.parquet')
+train_orig = pd.read_parquet(train_parquet)
+
 #%%
 features_csv = os.path.join(DATA_DIR, 'features.csv')
 features = pd.read_csv(features_csv)
@@ -69,9 +75,10 @@ plot_features(tags_dict['tag_2'], train_final)
 # feats = ['feature_106', 'feature_118']
 feats = ['feature_98', 'feature_104']
 plot_features(feats, train_final, start_day=320, num_days=2)
-plt.savefig(DATA_DIR+'feat_98_104_fillna_pdm.png')
-plot_features(feats, train, start_day=320,num_days=2)
-plt.savefig(DATA_DIR+'feat_98_104.png')
+# plt.savefig(DATA_DIR+'feat_98_104_fillna_pdm.png')
+plot_features(feats, train_final_ver1, start_day=320, num_days=2)
+plot_features(feats, train_orig, start_day=320,num_days=2)
+# plt.savefig(DATA_DIR+'feat_98_104.png')
 # %%
 train_final['feature_92'].value_counts().sort_values(ascending=False)
 train_final.query('date in [320]')['feature_92'].value_counts().sort_values(ascending=False)
@@ -80,3 +87,13 @@ feats = ['feature_1', 'feature_69']
 start_day = np.random.randint(0, 500-3, 1)[0]
 plot_features(feats, train_final, start_day=start_day)
 plot_features(feats, train, start_day=start_day)
+
+#%%
+feat_spike_index = [1, 2, 69, 71, 85, 87, 88, 91, 93, 94, 97, 99, 100, 103, 105, 106]
+# feats = ['feature_100', 'feature_106']
+feats = ['feature_1', 'feature_2', 'feature_69']
+start_day = np.random.randint(0, 500-3, 1)[0]
+plot_features(feats, train_final, start_day=start_day, scatter=True)
+plot_features(feats, train, start_day=start_day,  scatter=True)
+# %%
+train[['feature_85','feature_91']].value_counts()

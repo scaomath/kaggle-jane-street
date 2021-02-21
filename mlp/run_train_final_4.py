@@ -1,6 +1,12 @@
 # %%
 import os
 import sys
+current_path = os.path.dirname(os.path.abspath(__file__))
+HOME = os.path.dirname(current_path)
+sys.path.append(HOME)
+for f in ['/home/scao/anaconda3/lib/python3.8/lib-dynload',
+          '/home/scao/anaconda3/lib/python3.8/site-packages']:
+    sys.path.append(f)
 
 import pandas as pd
 import torch
@@ -8,35 +14,58 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchsummary import summary
 
-
-current_path = os.path.dirname(os.path.abspath(__file__))
-HOME = os.path.dirname(current_path)
-sys.path.append(HOME)
-# for f in ['/home/scao/anaconda3/lib/python3.8/lib-dynload',
-#           '/home/scao/anaconda3/lib/python3.8/site-packages']:
-#     sys.path.append(f)
 from utils import *
 from utils_js import *
 
 from mlp import *
 pd.set_option('display.max_rows', 100)
 pd.set_option('display.max_columns', 100)
+#%%
+'''
+Final model spikenet:
+
+1. subtract the most common values from columns with a spike in the histogram to form cat features.
+'''
+
 
 # %%
 BATCH_SIZE = 8192
-FINETUNE_BATCH_SIZE = 4096_00
+FINETUNE_BATCH_SIZE = 3500_00
 
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-5
 EPOCHS = 100
-EARLYSTOP_NUM = 20
-SAVE_THRESH = 3240
+EARLYSTOP_NUM = 5
+SAVE_THRESH = 1100
 
 ALPHA = 0.6
 
-_fold = 0
-SEED = 802
-get_seed(SEED+SEED*_fold)
+s = 7
+SEED = 1127802*s
+np.random.seed(SEED)
+pd.core.common.random_state(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed(SEED)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(SEED)
+
+splits = {
+          'train_days': (range(0,457), range(0,424), range(0,391)),
+          'valid_days': (range(467, 500), range(434, 466), range(401, 433)),
+          }
+fold = 1
+
+if fold == 0:
+    SAVE_THRESH = 1300
+elif fold == 1:
+    SAVE_THRESH = 1200
+elif fold == 2:
+    SAVE_THRESH = 1200
+
+VOLATILE_DAYS = [1,  4,  5,  12,  16,  18,  24,  37,  38,  43,  44,  45,  47,
+             59,  63,  80,  85, 161, 168, 452, 459, 462]
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # %%
@@ -64,7 +93,9 @@ feat_spike_index = [1, 2, 3, 4, 5, 6, 10, 14, 16, 69, 70, 71, 73, 74, 75, 76, 79
 feat_reg_index = list(set(range(130)).difference(feat_spike_index))
 features_reg = [f'feature_{i}' for i in feat_reg_index]
 features_spike = [f'feature_{i}' for i in feat_spike_index]
+
 resp_cols = ['resp_1', 'resp_2', 'resp_3', 'resp', 'resp_4', ]
+target_cols = ['action_1', 'action_2', 'action_3', 'action', 'action_4']
 
 feat_cols = [f'feature_{i}' for i in range(130)]
 # feat_cols = features_reg
@@ -83,22 +114,22 @@ for i, feat in tqdm(enumerate(features_spike)):
     # feat_spike_index.append(sorted_counts.name.split('_')[-1])
     # most_common_val = sorted_counts.index[0]
     # most_common_vals.append(most_common_val)
-    train[feat+'_c'] = train[feat] - most_common_vals[i]
+    train[feat+'_c'] = (train[feat] - most_common_vals[i]).astype(int)
+    # print(train[feat+'_c'].astype(int).value_counts()[:5])
     
 # %%
 train = train.query(f'date not in {[2, 36, 270, 294]}').reset_index(drop=True)
 train = train.query('date > 85').reset_index(drop=True)
-
+# train = train.query(f'date not in {VOLATILE_DAYS}').reset_index(drop=True)
+# train.fillna(train.mean(), inplace=True)
 train = train[train['weight'] != 0].reset_index(drop=True)
 train['action'] = (train['resp'] > 0).astype('int')
 
 for c in range(1, 5):
-    train['action_'+str(c)] = (train['resp_'+str(c)] > 0).astype('int')
+    train['action_'+str(c)] = (train['resp_'+str(c)] > 0).astype(np.int32)
 
-# fold_1 470, 475
-# fold_2 450, 455
-valid = train.loc[train.date >= 455].reset_index(drop=True)
-train = train.loc[train.date <= 450].reset_index(drop=True)
+valid = train.loc[train.date.isin(splits['valid_days'][fold])].reset_index(drop=True)
+train = train.loc[train.date.isin(splits['train_days'][fold])].reset_index(drop=True)
 # %%
 
 
@@ -143,7 +174,7 @@ class SpikeNet(nn.Module):
         x_cat = self.embed(x_cat)
         # x_cat = self.emb_dropout(x_cat)
         x = torch.cat([x, x_cat], dim=1)
-        # x = self.batch_norm0(x)
+        x = self.batch_norm0(x)
         x = self.dropout0(x)
 
         x1 = self.dense1(x)
@@ -216,7 +247,7 @@ valid_loader = DataLoader(
 util_cols = resp_cols
 # util_cols = ['resp']
 resp_index = [resp_cols.index(r) for r in util_cols]
-regularizer = UtilityLoss(alpha=1e-1, scaling=12,
+regularizer = UtilityLoss(alpha=5e-2, scaling=12,
                           normalize=None, resp_index=resp_index)
 loss_fn = SmoothBCEwLogits(smoothing=0.005)
 
@@ -238,11 +269,9 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
 finetune_loader = DataLoader(
     train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
 
-finetune_optimizer = torch.optim.Adam(
-    model.parameters(), lr=LEARNING_RATE*1e-2)
+finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-2)
 
-early_stop = EarlyStopping(patience=EARLYSTOP_NUM,
-                           mode="max", save_threshold=SAVE_THRESH)
+early_stop = EarlyStopping(patience=EARLYSTOP_NUM, mode="max", save_threshold=SAVE_THRESH)
 
 # %%
 
@@ -263,17 +292,17 @@ for epoch in range(EPOCHS):
     valid_auc, valid_score = get_valid_score(valid_pred, valid,
                                              f=median_avg, threshold=0.5, target_cols=target_cols)
     model_file = MODEL_DIR + \
-        f"/emb_fold_{_fold}_ep_{epoch}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
+        f"/emb_fold_{fold}_ep_{epoch}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
     early_stop(epoch, valid_auc, model, model_path=model_file,
                epoch_utility_score=valid_score)
 
-    if early_stop.model_saved:
-        for g in optimizer.param_groups:
-            g['lr'] *= 0.1
-        lr[-1] = optimizer.param_groups[0]['lr']
-        tqdm.write(f"\nNew learning rate: {lr[-1]:.4e}")
+    # if early_stop.model_saved:
+    #     for g in optimizer.param_groups:
+    #         g['lr'] *= 0.1
+    #     lr[-1] = optimizer.param_groups[0]['lr']
+    #     tqdm.write(f"\nNew learning rate: {lr[-1]:.4e}")
         
-    tqdm.write(f"\n[Epoch {epoch+1}/{EPOCHS}] \t Fold {_fold}")
+    tqdm.write(f"\n[Epoch {epoch+1}/{EPOCHS}] \t Fold {fold}")
     tqdm.write(
         f"Train loss: {train_loss:.4f} \t Current learning rate: {lr[-1]:.4e}")
     tqdm.write(
@@ -283,12 +312,4 @@ for epoch in range(EPOCHS):
     if early_stop.early_stop:
         print("\nEarly stopping")
         break
-# %% debug, un-necessary
-# sample = next(iter(train_loader))
-# cat_dims = [int(train[col].nunique()) for col in cat_cols]
-# emb_dims = [(x, min(50, (x + 1) // 2)) for x in cat_dims]
-# emb_layers = nn.ModuleList([nn.Embedding(x, y)
-#                                      for x, y in emb_dims])
-# x = [emb_layer(sample['cat_features'][0,i].long())
-#            for i,emb_layer in enumerate(emb_layers)]
 # %%

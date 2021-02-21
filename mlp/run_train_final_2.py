@@ -79,7 +79,7 @@ splits = {
           'train_days': (range(0,470), range(0,450), range(0,430)),
           'valid_days': (range(475, 500), range(455, 500), range(455, 500)),
           }
-fold = 1
+fold = 0
 
 
 SEED = 1127802
@@ -144,9 +144,9 @@ train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_wo
 valid_set = ExtendedMarketDataset(valid, features=feat_cols, targets=target_cols, resp=resp_cols)
 valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
 
-# model = ResidualMLP(input_size=len(feat_cols), hidden_size=256, output_size=len(target_cols))
+model = ResidualMLP(input_size=len(feat_cols), hidden_size=256, output_size=len(target_cols))
 # model = MLP(hidden_units=(None,160,160,160), input_dim=len(feat_cols), output_dim=len(target_cols))
-model = ResidualMLPLite(input_size=len(feat_cols), hidden_size=256, output_size=len(target_cols))
+# model = ResidualMLPLite(input_size=len(feat_cols), hidden_size=256, output_size=len(target_cols))
 model.to(device)
 summary(model, input_size=(len(feat_cols), ))
 # %%
@@ -175,7 +175,7 @@ finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=
 finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
 early_stop = EarlyStopping(patience=EARLYSTOP_NUM, mode="max", save_threshold=CV_THRESH)
 # %%
-_fold = 1
+_fold = 0
 get_seed(SEED+SEED*_fold)
 for epoch in range(EPOCHS):
 

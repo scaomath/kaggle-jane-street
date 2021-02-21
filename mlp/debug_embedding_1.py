@@ -6,15 +6,17 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchsummary import summary
+
 
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.dirname(current_path)
 sys.path.append(HOME)
-# for f in ['/home/scao/anaconda3/lib/python3.8/lib-dynload',
-#           '/home/scao/anaconda3/lib/python3.8/site-packages']:
-#     sys.path.append(f)
+for f in ['/home/scao/anaconda3/lib/python3.8/lib-dynload',
+          '/home/scao/anaconda3/lib/python3.8/site-packages']:
+    sys.path.append(f)
+
+from torchsummary import summary
 from utils import *
 from utils_js import *
 
@@ -42,7 +44,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # %%
 with timer("Preprocessing train"):
     # train_parquet = os.path.join(DATA_DIR, 'train.parquet')
-    train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
+    # train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
+    train_parquet = os.path.join(DATA_DIR, 'train_final.parquet')
     train = pd.read_parquet(train_parquet)
 # %%
 # feat_reg_index = [0, 17, 18, 37, 39, 40, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 55, 57, 58]
@@ -85,7 +88,7 @@ for i, feat in tqdm(enumerate(features_spike)):
     train[feat+'_c'] = train[feat] - most_common_vals[i]
     
 # %%
-train = train.query(f'date not in {[2, 36, 270, 294]}').reset_index(drop=True)
+train = train.query('date not in [2, 36, 270, 294]').reset_index(drop=True)
 train = train.query('date > 85').reset_index(drop=True)
 
 train = train[train['weight'] != 0].reset_index(drop=True)
@@ -94,8 +97,8 @@ train['action'] = (train['resp'] > 0).astype('int')
 for c in range(1, 5):
     train['action_'+str(c)] = (train['resp_'+str(c)] > 0).astype('int')
 
-# fold_1 470, 475
-# fold_2 450, 455
+# fold_0 470, 475
+# fold_1 450, 455
 valid = train.loc[train.date >= 475].reset_index(drop=True)
 train = train.loc[train.date <= 470].reset_index(drop=True)
 # %%
@@ -167,16 +170,14 @@ class SpikeNetC(nn.Module):
 train_set = ExtendedMarketDataset(train,
                              features=feat_cols,
                              targets=target_cols, resp=resp_cols)
-train_loader = DataLoader(
-    train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
+train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=8)
 
 valid_set = ExtendedMarketDataset(valid, features=feat_cols,
                              targets=target_cols, resp=resp_cols)
-valid_loader = DataLoader(
-    valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
+valid_loader = DataLoader(valid_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=8)
 # %%
-# util_cols = resp_cols
-util_cols = ['resp']
+util_cols = resp_cols
+# util_cols = ['resp']
 resp_index = [resp_cols.index(r) for r in util_cols]
 regularizer = UtilityLoss(alpha=5e-2, scaling=12,
                           normalize=None, resp_index=resp_index)
@@ -186,22 +187,18 @@ model = SpikeNetC()
 model.to(device)
 summary(model, (len(feat_cols),))
 
-optimizer = torch.optim.Adam(
-    model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 
-# scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE,
-#                                                 steps_per_epoch=len(
-#                                                     train_loader),
-#                                                 epochs=EPOCHS)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
-                                                                 T_0=10, T_mult=2,
-                                                                 eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
+scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE,
+                                                steps_per_epoch=len(train_loader),
+                                                epochs=EPOCHS)
+# scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
+#                                                                  T_0=10, T_mult=2,
+#                                                                  eta_min=LEARNING_RATE*1e-3, last_epoch=-1)
 
-finetune_loader = DataLoader(
-    train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
+finetune_loader = DataLoader(train_set, batch_size=FINETUNE_BATCH_SIZE, shuffle=True, num_workers=8)
 
-finetune_optimizer = torch.optim.Adam(
-    model.parameters(), lr=LEARNING_RATE*1e-2)
+finetune_optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE*1e-3)
 
 early_stop = EarlyStopping(patience=EARLYSTOP_NUM,
                            mode="max", save_threshold=SAVE_THRESH)
@@ -217,7 +214,7 @@ for epoch in range(EPOCHS):
     train_loss = train_epoch_weighted(model, optimizer, scheduler, loss_fn, train_loader, device)
     lr.append(optimizer.param_groups[0]['lr'])
 
-    if (epoch+1) % 10 == 0:
+    if (epoch+1) % 8 == 0:
         _ = train_epoch_finetune(model, finetune_optimizer, scheduler,
                                regularizer, finetune_loader, device, loss_fn=loss_fn)
 

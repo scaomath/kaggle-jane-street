@@ -103,7 +103,7 @@ except:
 
     for i, feat in enumerate(features_spike):
         sorted_counts = train[feat].value_counts().sort_values(ascending=False)
-        # print(sorted_counts.head(5), '\n\n')
+        print(sorted_counts.head(5), '\n\n')
         # if sorted_counts.iloc[0]/sorted_counts.iloc[1] > 30 and sorted_counts.iloc[0] > 5000:
         # feat_spike_index.append(sorted_counts.name.split('_')[-1])
         most_common_val = sorted_counts.index[0]
@@ -183,10 +183,11 @@ with tqdm(total=len(train)) as pbar:
         pdm.push(x_tt, date)
         
         past_day_mean = pdm.get_past_mean().reshape(-1)
-        
+        past_day_mean[feat_spike_index] = 0
+        fillna_val = past_day_mean + spike_fillna_val
         if np.isnan(x_tt.sum()):
-            x_tt = np.nan_to_num(x_tt) + np.isnan(x_tt)*spike_fillna_val # bug!!!!!!
-            x_tt = np.nan_to_num(x_tt) + np.isnan(x_tt)*past_day_mean
+            # x_tt = np.nan_to_num(x_tt) + np.isnan(x_tt)*spike_fillna_val # bug!!!!!!
+            x_tt = np.nan_to_num(x_tt) + np.isnan(x_tt)*fillna_val
 
         feat_vals.append(x_tt)
         pbar.update()
