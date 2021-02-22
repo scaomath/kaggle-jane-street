@@ -9,6 +9,7 @@ DATA_DIR = HOME+'/data/'
 from utils import *
 from utils_js import *
 from mlp.tf_models import *
+from mlp.mlp import *
 
 import random
 import sys
@@ -23,21 +24,25 @@ from sklearn.metrics import roc_auc_score
 from tqdm import tqdm
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 tf.config.optimizer.set_jit(True)
+
+device = torch.device('cpu')
 # %%
+
 '''
-Loading model trained in tf and verify their utility scores
+Various setup for different models
 '''
-train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
-train = pd.read_parquet(train_parquet)
-# %%
-'''
-Final model resnet
-'''
+CV_START_DAY = 401
+CV_DAYS = 32
 
 features = [f'feature_{i}' for i in range(130)]
 
+features_t = features+ ['cross_41_42_43', 'cross_1_2']
+
 resp_cols = ['resp_1', 'resp_2', 'resp_3', 'resp', 'resp_4']
+target_cols = ['action_1', 'action_2', 'action_3', 'action', 'action_4']
+
 resp_cols_vol = ['resp_3', 'resp', 'resp_4']
+target_cols_vol = ['action_3', 'action', 'action_4']
 # split features for a ResNet feature 2 is more important
 features_2_index = [0, 1, 2, 3, 4, 5, 6, 15, 16, 25, 26, 35, 
              36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 
@@ -71,14 +76,35 @@ features_spike = [f'feature_{i}' for i in feat_spike_index]
 
 cat_cols = [f+'_c' for f in features_spike]
 
-
 #%%
-model_files = ['resnet_reg_fold_0_seed_1127802.h5', 
-                'resnet_reg_fold_1_seed_1127802.h5',
-                'resnet_reg_fold_2_seed_1127802.h5']
-# model_files = ['tf2_fold_1_res_seed_792734.h5',
-#                'tf2_fold_2_res_seed_97275.h5']
+'''
+Loading model trained in tf and verify their utility scores
+'''
+train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
+train = pd.read_parquet(train_parquet)
+train['action'] = (train['resp'] > 0).astype(int)
+for c in range(1,5):
+    train['action_'+str(c)] = (train['resp_'+str(c)] > 0).astype(int)
 
+train['cross_41_42_43'] = train['feature_41'] + train['feature_42'] + train['feature_43']
+train['cross_1_2'] = train['feature_1'] / (train['feature_2'] + 1e-5).astype(np.float32)
+
+most_common_vals = np.load(DATA_DIR+'spike_common_vals_42.npy').reshape(-1)
+for i, feat in tqdm(enumerate(features_spike)):
+    train[feat+'_c'] = (train[feat] - most_common_vals[i]).astype(np.int32)
+#%%
+'''
+Final model resnet
+'''
+# model_files = ['resnet_reg_fold_0_seed_1127802.h5', 
+#                 'resnet_reg_fold_1_seed_1127802.h5',
+#                 'resnet_reg_fold_2_seed_1127802.h5']
+model_files = ['resnet_reg_fold_1_res_seed_792734.h5',
+               'resnet_reg_fold_2_res_seed_97275.h5']
+
+# model_files = ['resnet_reg_fold_0_seed_157157.h5', 
+#                 'resnet_reg_fold_1_seed_157157.h5',
+#                 'resnet_reg_fold_2_seed_157157.h5']
 for _fold, model_file in enumerate(model_files):
     print(f"Model {model_file}")
     tf.keras.backend.clear_session()
@@ -93,15 +119,21 @@ for _fold, model_file in enumerate(model_files):
                             feature_indices=(features, features_1_index, features_2_index))
 
 #%%
+'''
+Final model resnet
+'''
 # model_files = ['resnet_volatile_fold_0_seed_1127802.h5', 
 #                 'resnet_volatile_fold_1_seed_1127802.h5',
 #                 'resnet_volatile_fold_2_seed_1127802.h5']
-model_files = ['resnet_volatile_fold_0_seed_157157.h5', 
-                'resnet_volatile_fold_1_seed_157157.h5',
-                'resnet_volatile_fold_2_seed_157157.h5']
+# model_files = ['resnet_volatile_fold_0_seed_157157.h5', 
+#                 'resnet_volatile_fold_1_seed_157157.h5',
+#                 'resnet_volatile_fold_2_seed_157157.h5']
 
-model_files = ['resnet_volatile_fold_0_seed_745273.h5', 
-            'resnet_volatile_fold_2_seed_962656.h5']
+# model_files = ['resnet_volatile_fold_0_seed_745273.h5', 
+#                'resnet_volatile_fold_2_seed_962656.h5']
+model_files = ['resnet_volatile_fold_0_seed_5567273.h5', 
+                'resnet_volatile_fold_1_seed_123835.h5',
+                'resnet_volatile_fold_2_seed_676656.h5']
 
 for _fold, model_file in enumerate(model_files):
     print(f"Model {model_file}")
@@ -116,6 +148,9 @@ for _fold, model_file in enumerate(model_files):
                             f=median_avg, threshold=0.5, 
                             feature_indices=(features, features_1_index_v, features_2_index_v))
 # %%
+'''
+Final model ae+mlp
+'''
 # encoder_file = 'encoder_reg.hdf5'
 # model_files = ['ae_reg_fold_0.hdf5', 
 #                 'ae_reg_fold_1.hdf5',
@@ -145,8 +180,11 @@ for _fold, model_file in enumerate(model_files):
 
     print_valid_score_tf(train, model, start_day=400, num_days=33, 
                             f=median_avg, threshold=0.5, 
-                            feature_indices=(features, features_1_index, features_2_index)
+                            feature_indices=(features, features_1_index, features_2_index))
 # %%
+'''
+Final model ae+mlp
+'''
 # volatile models, 3 targets
 # encoder_file = 'encoder_volatile.hdf5'
 # model_files = ['ae_volatile_fold_0.hdf5', 
@@ -184,7 +222,6 @@ for _fold, model_file in enumerate(model_files):
     print_valid_score_tf(train, model, start_day=400, num_days=33, 
                             f=median_avg, threshold=0.5, 
                             feature_indices=[features])
-# %%
 
 #%%
 model_files = ['tf_spike_reg_seed_1127802_fold_0.h5', 
@@ -205,4 +242,61 @@ for _fold, model_file in enumerate(model_files):
     print_valid_score_tf(train, tf_model, start_day=400, num_days=33, 
                             f=median_avg, threshold=0.5, 
                             feature_indices=(features, features_1_index, features_2_index, feat_spike_index))
+# %%
+
+model_files = ['emb_volatile_fold_0_util_1445_auc_0.5550.pth',
+               'emb_volatile_fold_1_util_1225_auc_0.5557.pth',
+               'emb_volatile_fold_2_util_240_auc_0.5455.pth']
+
+
+for _fold, model_file in enumerate(model_files):
+    model = SpikeNet()
+    model.to(device)
+    model_weights = os.path.join(MODEL_DIR, model_file)
+    model.load_state_dict(torch.load(model_weights, map_location='cpu'))
+    model.eval();
+    print(f"\n\nModel {model_file}")
+    print_all_valid_score(train, model, start_day=CV_START_DAY, num_days=CV_DAYS, 
+                            batch_size =8192, f=median_avg, threshold=0.5, 
+                            target_cols=target_cols, 
+                            feat_cols=features,
+                            resp_cols=resp_cols,
+                            cat_input=cat_cols)
+# %%
+model_files = ['pt_volatile_0_util_1424_auc_0.5520.pth',
+               'pt_volatile_1_util_1137_auc_0.5470.pth',
+               'pt_volatile_2_util_322_auc_0.5444.pth']
+
+
+for _fold, model_file in enumerate(model_files):
+    model = ResidualMLP(input_size=len(features_t), hidden_size=256, output_size=len(target_cols))
+    model.to(device)
+    model_weights = os.path.join(MODEL_DIR, model_file)
+    model.load_state_dict(torch.load(model_weights, map_location='cpu'))
+    model.eval();
+    print(f"\nModel {model_file}")
+    print_all_valid_score(train, model, start_day=CV_START_DAY, num_days=CV_DAYS, 
+                            batch_size = 8192, f=median_avg, threshold=0.5, 
+                            target_cols=target_cols, 
+                            feat_cols=features_t,
+                            resp_cols=resp_cols)
+ # %%
+# %%
+model_files = ['final_0_util_1372_auc_0.5483.pth',
+               'final_1_util_865_auc_0.5450.pth',
+               'final_2_util_507_auc_0.5428.pth']
+
+
+for _fold, model_file in enumerate(model_files):
+    model = ResidualMLP(input_size=len(features_t), hidden_size=256, output_size=len(target_cols))
+    model.to(device)
+    model_weights = os.path.join(MODEL_DIR, model_file)
+    model.load_state_dict(torch.load(model_weights, map_location='cpu'))
+    model.eval();
+    print(f"\nModel {model_file}")
+    print_all_valid_score(train, model, start_day=CV_START_DAY, num_days=CV_DAYS, 
+                            batch_size = 8192, f=median_avg, threshold=0.5, 
+                            target_cols=target_cols, 
+                            feat_cols=features_t,
+                            resp_cols=resp_cols)
 # %%

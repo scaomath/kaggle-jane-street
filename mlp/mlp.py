@@ -48,6 +48,9 @@ features_tag_file = os.path.join(DATA_DIR, 'features.csv')
 all_feat_cols = [col for col in feat_cols]
 all_feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
 
+feat_spike_index = [1, 2, 3, 4, 5, 6, 10, 14, 16, 69, 70, 71, 73, 74, 75, 76, 79, 80, 81, 82, 85,
+                    86, 87, 88, 91, 92, 93, 94, 97, 98, 99, 100, 103, 104, 105, 106, 109, 111, 112, 115, 117, 118]
+
 val_util_thresh = 6000
 
 ##### Model&Data fnc
@@ -222,6 +225,77 @@ class MLP(nn.Module):
         
         return x
 
+class SpikeNet(nn.Module):
+    def __init__(self, hidden_size=256,
+                 cat_dim=len(feat_spike_index),
+                 output_size=len(resp_cols),
+                 input_size=len(feat_cols),
+                 dropout_rate=0.2,
+                 alpha=0.6):
+        super(SpikeNet, self).__init__()
+        # self.embed = nn.Embedding(cat_dim, 2)
+        self.embed = nn.Linear(cat_dim, int(cat_dim*alpha))
+        self.emb_dropout = nn.Dropout(0.1)
+
+        self.batch_norm0 = nn.BatchNorm1d(input_size+int(cat_dim*alpha))
+        self.dropout0 = nn.Dropout(0.1)
+
+        self.dense1 = nn.Linear(input_size+int(cat_dim*alpha), hidden_size)
+        # nn.init.kaiming_normal_(self.dense1.weight.data)
+        self.batch_norm1 = nn.BatchNorm1d(hidden_size)
+        self.dropout1 = nn.Dropout(dropout_rate)
+
+        self.dense2 = nn.Linear(
+            hidden_size+input_size+int(cat_dim*alpha), hidden_size)
+        # nn.init.kaiming_normal_(self.dense2.weight.data)
+        self.batch_norm2 = nn.BatchNorm1d(hidden_size)
+        self.dropout2 = nn.Dropout(dropout_rate)
+
+        self.dense3 = nn.Linear(hidden_size+hidden_size, hidden_size)
+        # nn.init.kaiming_normal_(self.dense3.weight.data)
+        self.batch_norm3 = nn.BatchNorm1d(hidden_size)
+        self.dropout3 = nn.Dropout(dropout_rate)
+
+        self.dense4 = nn.Linear(hidden_size+hidden_size, output_size)
+        # nn.init.kaiming_normal_(self.dense4.weight.data)
+
+        self.LeakyReLU = nn.LeakyReLU(negative_slope=0.01, inplace=True)
+
+    def forward(self, x, x_cat):
+        #
+        x_cat = self.embed(x_cat)
+        # x_cat = self.emb_dropout(x_cat)
+        x = torch.cat([x, x_cat], dim=1)
+        x = self.batch_norm0(x)
+        x = self.dropout0(x)
+
+        x1 = self.dense1(x)
+        x1 = self.batch_norm1(x1)
+        x1 = self.LeakyReLU(x1)
+        x1 = self.dropout1(x1)
+
+        x = torch.cat([x, x1], 1)
+
+        x2 = self.dense2(x)
+        x2 = self.batch_norm2(x2)
+        x2 = self.LeakyReLU(x2)
+        x2 = self.dropout2(x2)
+
+        x = torch.cat([x1, x2], 1)
+
+        x3 = self.dense3(x)
+        x3 = self.batch_norm3(x3)
+        x3 = self.LeakyReLU(x3)
+        x3 = self.dropout3(x3)
+
+        x = torch.cat([x2, x3], 1)
+
+        x = self.dense4(x)
+
+        return x
+
+
+
 
 class FeatureFFN (nn.Module):
     
@@ -392,17 +466,17 @@ class ExtendedMarketDataset:
         }
 
 class MarketDatasetCat:
-    def __init__(self, df, features=feat_cols, 
-                           cat_features=None,
-                           targets=target_cols,
-                           resp = resp_cols,
-                           date='date',
-                           weight='weight'):
+    def __init__(self, df, features=feat_cols,
+                 cat_features=None,
+                 targets=target_cols,
+                 resp=resp_cols,
+                 date='date',
+                 weight='weight'):
         self.features = df[features].values
         self.label = df[targets].astype('int').values.reshape(-1, len(targets))
         self.resp = df[resp].astype('float').values.reshape(-1, len(resp))
-        self.date = df[date].astype('int').values.reshape(-1,1)
-        self.weight = df[weight].astype('float').values.reshape(-1,1)
+        self.date = df[date].astype('int').values.reshape(-1, 1)
+        self.weight = df[weight].astype('float').values.reshape(-1, 1)
         self.cat_features = df[cat_features].astype('int').values
 
     def __len__(self):
@@ -410,12 +484,12 @@ class MarketDatasetCat:
 
     def __getitem__(self, idx):
         return {
-        'features': torch.tensor(self.features[idx], dtype=torch.float),
-        'cat_features': torch.tensor(self.cat_features[idx], dtype=torch.int8),
-        'label': torch.tensor(self.label[idx], dtype=torch.float),
-        'resp':torch.tensor(self.resp[idx], dtype=torch.float),
-        'date':torch.tensor(self.date[idx], dtype=torch.int32),
-        'weight':torch.tensor(self.weight[idx], dtype=torch.float),
+            'features': torch.tensor(self.features[idx], dtype=torch.float),
+            'cat_features': torch.tensor(self.cat_features[idx], dtype=torch.float),
+            'label': torch.tensor(self.label[idx], dtype=torch.float),
+            'resp': torch.tensor(self.resp[idx], dtype=torch.float),
+            'date': torch.tensor(self.date[idx], dtype=torch.int32),
+            'weight': torch.tensor(self.weight[idx], dtype=torch.float),
         }
 
 class SmoothBCEwLogits(_WeightedLoss):
@@ -907,7 +981,8 @@ def print_all_valid_score(df, model, start_day=100, num_days=50,
                           f=median_avg, threshold=0.5, 
                           target_cols=target_cols,
                           feat_cols=feat_cols,
-                          resp_cols=resp_cols):
+                          resp_cols=resp_cols,
+                          cat_input=None):
 
     '''
     print
@@ -921,9 +996,16 @@ def print_all_valid_score(df, model, start_day=100, num_days=50,
     for _day in range(start_day, 500-num_days, num_days):
         _valid = df[df.date.isin(range(_day, _day+num_days))]
         _valid = _valid[_valid.weight > 0]
-        valid_set = ExtendedMarketDataset(_valid, features=feat_cols, targets=target_cols, resp=resp_cols)
-        valid_loader = DataLoader(valid_set, batch_size=batch_size, shuffle=False, num_workers=8, drop_last=False)
-        valid_pred = valid_epoch(model, valid_loader, device)
+        
+        if cat_input:
+            valid_set = MarketDatasetCat(_valid, features=feat_cols, cat_features=cat_input,
+                             targets=target_cols, resp=resp_cols)
+            valid_loader = DataLoader(valid_set, batch_size=batch_size, shuffle=False, num_workers=8)
+            valid_pred = valid_epoch(model, valid_loader, device, cat_input=True)
+        else:
+            valid_set = ExtendedMarketDataset(_valid, features=feat_cols, targets=target_cols, resp=resp_cols)
+            valid_loader = DataLoader(valid_set, batch_size=batch_size, shuffle=False, num_workers=8, drop_last=False)
+            valid_pred = valid_epoch(model, valid_loader, device)
         valid_auc, valid_score = get_valid_score(valid_pred, _valid, f=f, threshold=threshold, target_cols=target_cols)
         print(
             f"Day {_day:3d}-{_day+num_days-1:3d}: util score:{valid_score:.2f} \t auc:{valid_auc:.4f}")

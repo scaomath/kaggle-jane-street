@@ -127,6 +127,9 @@ Current NN models use `date>85` and `weight>0`.
 | 1      |  792734     | 1221.17 |
 | 2      |  1127802    | 80.85   |
 | 2      |  97275      | 146.31  |
+| 0      |  157157    | 1554.01|
+| 1      |  157157    | 1273.48 |
+| 2      |  157157    | 19.76  |
 
 #### ResNet (TF), two features group, volatile days
 | Fold   |      Seed   |  Score |
@@ -139,8 +142,11 @@ Current NN models use `date>85` and `weight>0`.
 | 2      |  157157    | 11.14  |
 | 0      |  745273    | 1511.12 |
 | 1      |  962656  |  0.01 |
+| 0      |  5567273    |  1457.13 |
+| 1      |  123835    | 1290.73 |
+| 2      |  676656    | 34.38  |
 
-#### ResNet+spike (TF+S), three features group, regular days
+#### ResNet+spike (TF+S), three features group, regular days (too slow for inference)
 | Fold   |      Seed   |  Score |
 |--------|:-----------:|------: |
 | 0      |  1127802    | 1417.43 |

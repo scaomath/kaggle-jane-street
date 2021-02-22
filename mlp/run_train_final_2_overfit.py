@@ -49,8 +49,8 @@ VOLATILE_DAYS = [1,  4,  5,  12,  16,  18,  24,  37,  38,  43,  44,  45,  47,
              59,  63,  80,  85, 161, 168, 452, 459, 462]
 VOLATILE_MODEL = True
 
-s = 4
-SEED = 1127802*s
+
+SEED = 802
 np.random.seed(SEED)
 pd.core.common.random_state(SEED)
 torch.manual_seed(SEED)
@@ -65,24 +65,34 @@ splits = {
           'valid_days': (range(467, 500), range(434, 466), range(401, 433)),
           }
 
-fold = 0
+fold = 2
 
 if fold == 0:
-    SAVE_THRESH = 1500
-    VAL_OFFSET = 100
+    SAVE_THRESH = 2000
+    VAL_OFFSET = 70
 elif fold == 1:
-    SAVE_THRESH = 1500
-    VAL_OFFSET = 100
+    SAVE_THRESH = 1800
+    VAL_OFFSET = 70
 elif fold == 2:
-    SAVE_THRESH = 400
-    VAL_OFFSET = 100
-    EPOCHS = 50
-    LEARNING_RATE = 1e-3
+    SAVE_THRESH = 1000
+    VAL_OFFSET = 70
     EPSILON = 1e-2
 
-resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3','resp_4']
-resp_cols_all = resp_cols
-target_cols = ['action', 'action_1','action_2','action_3', 'action_4']
+if VOLATILE_MODEL:
+    resp_cols = ['resp_3','resp','resp_4']
+    resp_cols_all = resp_cols
+    util_cols = ['resp_3','resp','resp_4']
+    # util_cols =['resp_3','resp', 'resp_4']
+    resp_index = [resp_cols_all.index(r) for r in util_cols]
+    target_cols = ['action_3','action',  'action_4']
+else:
+    resp_cols = ['resp', 'resp_1', 'resp_2', 'resp_3','resp_4']
+    resp_cols_all = resp_cols
+    util_cols =['resp_1','resp_2', 'resp_3', 'resp', 'resp_4']
+    # util_cols =['resp_3','resp', 'resp_4']
+    resp_index = [resp_cols_all.index(r) for r in util_cols]
+    target_cols = ['action', 'action_1','action_2','action_3', 'action_4']
+
 feat_cols = [f'feature_{i}' for i in range(130)]
 feat_cols += ['cross_41_42_43', 'cross_1_2']
 
@@ -101,9 +111,7 @@ rm_500_cols = ['feature_' + str(i) + '_rm_500' for i in running_indices]
 ###### adding weight to the features #######
 # feat_cols.extend(['weight'])
 
-util_cols =['resp_1','resp_2', 'resp_3', 'resp', 'resp_4']
-# util_cols =['resp_3','resp', 'resp_4']
-resp_index = [resp_cols_all.index(r) for r in util_cols]
+
 
 
 f = median_avg
@@ -111,26 +119,27 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # %%
 with timer("Preprocessing train"):
-    train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
+    # train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
+    train_parquet = os.path.join(DATA_DIR, 'train.parquet')
     train = pd.read_parquet(train_parquet)
 
     # feat_add_parquet = os.path.join(DATA_DIR, 'feat_rm_500.parquet')
     # feat_add_df = pd.read_parquet(feat_add_parquet)
 
     # train = pd.concat([train, feat_add_df], axis=1)
-
+    
     if not VOLATILE_MODEL:
     # train = train.query(f'date not in {VOLATILE_DAYS}').reset_index(drop = True)
         train = train.query('date > 85').reset_index(drop=True)
+    train.fillna(train.mean(), inplace=True)
 
-    if DROP_ZERO_WEIGHT:
-        train = train[train['weight'] > 0].reset_index(drop = True)
-    else:
-        index_zero_weight =  (train['weight']==0)
-        index_zero_weight = np.where(index_zero_weight)[0]
-        index_zero_weight = np.random.choice(index_zero_weight, size=int(0.4*len(index_zero_weight)))
-        train.loc[index_zero_weight, ['weight']] = train.loc[index_zero_weight, ['weight']].clip(1e-7)
-        # train = train[train['weight'] > 0].reset_index(drop = True)
+    train = train[train['weight'] > 0].reset_index(drop = True)
+    
+    # index_zero_weight =  (train['weight']==0)
+    # index_zero_weight = np.where(index_zero_weight)[0]
+    # index_zero_weight = np.random.choice(index_zero_weight, size=int(0.4*len(index_zero_weight)))
+    # train.loc[index_zero_weight, ['weight']] = train.loc[index_zero_weight, ['weight']].clip(1e-7)
+    # # train = train[train['weight'] > 0].reset_index(drop = True)
 
     train['action'] = (train['resp'] > 0).astype(int)
     for c in range(1,5):
@@ -157,7 +166,7 @@ model = ResidualMLP(input_size=len(feat_cols), hidden_size=256, output_size=len(
 model.to(device)
 summary(model, input_size=(len(feat_cols), ))
 # %%
-regularizer = UtilityLoss(alpha=5e-2, scaling=SCALING, normalize=None, resp_index=resp_index)
+regularizer = UtilityLoss(alpha=EPSILON, scaling=SCALING, normalize=None, resp_index=resp_index)
 
 loss_fn = SmoothBCEwLogits(smoothing=0.005)
 
@@ -219,11 +228,8 @@ model = ResidualMLP(input_size=len(feat_cols), hidden_size=256,
                     output_size=len(target_cols))
 model.to(device)
 try:
-    # print(f"Loading {early_stop.model_path} for cv check.\n")
-    # model_weights = early_stop.model_path
-    # model_weights = os.path.join(MODEL_DIR, 'final_1_util_865_auc_0.5450.pth')
-    # model_weights = os.path.join(MODEL_DIR, 'final_0_util_1372_auc_0.5483.pth')
-    model_weights = os.path.join(MODEL_DIR, 'final_2_util_507_auc_0.5428.pth')
+    print(f"Loading {early_stop.model_path} for cv check.\n")
+    model_weights = early_stop.model_path
     model.load_state_dict(torch.load(model_weights))
     model.eval();
 
