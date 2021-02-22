@@ -154,7 +154,7 @@ Current NN models use `date>85` and `weight>0`.
 | 2      |  1127802    | 59.87   |
 | 2      |  802        | 175.96 |
 
-#### (AE) regular days
+#### (AE) regular days (only first two folds are used due to time constraint)
 | Fold   |      Seed   |  Score |
 |--------|:-----------:|------: |
 | 0      |  692874     | 1413.37 |
@@ -163,19 +163,25 @@ Current NN models use `date>85` and `weight>0`.
 | 1      |  1127802    | 1209.71 |
 | 2      |  692874     | 144.69 |
 | 2      |  1127802    | 144.29  |
+| 0      |  157157    | 1529.70 |
+| 1      |  157157    | 1052.70 |
+| 2      |  157157    | 402.80  |
 
-#### (AE) volatile days
+#### (AE) volatile days (only first two folds are used due to time constraint)
 | Fold   |      Seed   |  Score |
 |--------|:-----------:|------: |
 | 0      |  969725     | 1485.01 |
 | 0      |  1127802    | 1672.50 |
 | 0      |  618734     | 1623.88 |
+| 0      |  283467     | 1670.67 |
 | 1      |  969725     | 1284.02 |
 | 1      |  1127802    | 1347.90 |
 | 1      |  618734     | 969.63 |
+| 1      |  283467    | 1006.84 |
 | 2      |  969725     | 0.83 |
 | 2      |  1127802    | 0.26  |
 | 2      |  618734     | 0    |
+| 2      |  283467     | 49.79 |
 
 # Gradient boosting models
 ## XGBoost:

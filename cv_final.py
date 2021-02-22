@@ -149,7 +149,7 @@ for _fold, model_file in enumerate(model_files):
                             feature_indices=(features, features_1_index_v, features_2_index_v))
 # %%
 '''
-Final model ae+mlp
+Final model ae+mlp, 5 targets
 '''
 # encoder_file = 'encoder_reg.hdf5'
 # model_files = ['ae_reg_fold_0.hdf5', 
@@ -158,11 +158,17 @@ Final model ae+mlp
 # hp_file = 'hp_ae_reg.pkl'
 
 
-encoder_file = 'encoder_692874.hdf5'
-model_files = ['model_692874_0.hdf5', 
-                'model_692874_1.hdf5',
-                'model_692874_2.hdf5']
-hp_file = 'best_hp_692874.pkl'
+# encoder_file = 'encoder_692874.hdf5'
+# model_files = ['model_692874_0.hdf5', 
+#                 'model_692874_1.hdf5',
+#                 'model_692874_2.hdf5']
+# hp_file = 'best_hp_692874.pkl'
+
+encoder_file = 'ae_encoder_157157.hdf5'
+model_files = ['ae_157157_0.hdf5', 
+                'ae_157157_1.hdf5',
+                'ae_157157_2.hdf5']
+hp_file = 'ae_hp_157157.pkl'
 
 _, encoder = create_autoencoder(len(features), len(resp_cols), noise=0.1)
 
@@ -180,7 +186,7 @@ for _fold, model_file in enumerate(model_files):
 
     print_valid_score_tf(train, model, start_day=400, num_days=33, 
                             f=median_avg, threshold=0.5, 
-                            feature_indices=(features, features_1_index, features_2_index))
+                            feature_indices=[features])
 # %%
 '''
 Final model ae+mlp
@@ -199,11 +205,17 @@ Final model ae+mlp
 #                 'v_model_969725_2.hdf5']
 # hp_file = 'v_best_hp_969725.pkl'
 
-encoder_file = 'v_encoder_618734.hdf5'
-model_files = ['v_model_618734_0.hdf5', 
-                'v_model_618734_1.hdf5',
-                'v_model_618734_2.hdf5']
-hp_file = 'v_best_hp_618734.pkl'
+# encoder_file = 'v_encoder_618734.hdf5'
+# model_files = ['v_model_618734_0.hdf5', 
+#                 'v_model_618734_1.hdf5',
+#                 'v_model_618734_2.hdf5']
+# hp_file = 'v_best_hp_618734.pkl'
+
+encoder_file = 'ae_vol_encoder_283467.hdf5'
+model_files = ['ae_vol_283467_0.hdf5', 
+                'ae_vol_283467_1.hdf5',
+                'ae_vol_283467_2.hdf5']
+hp_file = 'ae_vol_hp_283467.pkl'
 
 _, encoder = create_autoencoder(len(features), len(resp_cols_vol), noise=0.1)
 
