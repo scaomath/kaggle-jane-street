@@ -146,7 +146,7 @@ Current NN models use `date>85` and `weight>0`.
 | 1      |  123835    | 1290.73 |
 | 2      |  676656    | 34.38  |
 
-#### ResNet+spike (TF+S), three features group, regular days (too slow for inference)
+#### ResNet+spike (TF+S), three features group, regular days (too slow for inference not going into the final sub pipeline)
 | Fold   |      Seed   |  Score |
 |--------|:-----------:|------: |
 | 0      |  1127802    | 1417.43 |
