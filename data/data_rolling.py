@@ -254,6 +254,6 @@ def process_train_rolling(train, debug=False):
 
 if __name__ == '__main__':
     get_system()
-    # train = load_train(drop_days=[2, 36, 270, 294])
-    train = load_train(drop_days=list(range(0,86))+[270, 294])
+    train = load_train(drop_days=[2, 36, 270, 294])
+    # train = load_train(drop_days=list(range(0,86))+[270, 294])
     process_train_rolling(train, debug=True)

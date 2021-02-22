@@ -4,9 +4,9 @@ import sys
 current_path = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.dirname(current_path)
 sys.path.append(HOME)
-for f in ['/home/scao/anaconda3/lib/python3.8/lib-dynload',
-          '/home/scao/anaconda3/lib/python3.8/site-packages']:
-    sys.path.append(f)
+
+from utils import *
+from utils_js import *
 
 import pandas as pd
 import torch
@@ -14,8 +14,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchsummary import summary
 
-from utils import *
-from utils_js import *
 
 from mlp import *
 pd.set_option('display.max_rows', 100)

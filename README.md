@@ -42,7 +42,7 @@ splits = {
 
 ## Submissions
 1. Local best CV ones within a three seeds bag. Final models: a set of `3(S) + 3(PT) + 3(AE) + 1(TF)`  for both smooth and volatile data.
-2. Trained with all data using the “public leaderboard as CV” epochs determined earlier, plus the infamous tensorflow seed 1111 overfit model.
+2. Trained with all data using the “public leaderboard as CV” epochs determined earlier, plus the infamous tensorflow seed 1111 overfit model. The validation for this submission is based on the variation of the utility score in all train data among all 25-day non-overlapping spans.
 
 ## Inference 
 1. CPU inference because the submission is CPU-bounded rather GPU. Torch models are usually faster than TF, TF models with `numba` backend enabled.

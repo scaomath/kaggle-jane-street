@@ -567,6 +567,7 @@ class EarlyStopping:
         self.message = " "
         self.save_threshold = save_threshold
         self.model_saved = False
+        self.model_path = " "
         
 
     def __call__(self, epoch, epoch_score, model, model_path, epoch_utility_score):
@@ -599,6 +600,7 @@ class EarlyStopping:
                     self.model_saved = True
                     self.message += " model saved."
                     self.save_checkpoint(epoch_score, model, model_path)
+                    self.model_path = model_path
                 else:
                     self.model_saved = False
                     
@@ -622,6 +624,7 @@ class EarlyStopping:
                 if score > self.save_threshold:
                     self.message += " model saved."
                     self.save_checkpoint(epoch_score, model, model_path)
+                    self.model_path = model_path
                 self.counter = 0
 
         
@@ -742,6 +745,8 @@ def train_epoch_weighted(model, optimizer, scheduler, loss_fn, dataloader, devic
     final_loss = 0
     len_data = len(dataloader)
     one_cycle_scheduler = (scheduler is not None and 'OneCycleLR' in str(scheduler.__class__))
+    anneal_scheduler = (scheduler is not None and 'Annealing' in str(scheduler.__class__))
+    batch_scheduler = one_cycle_scheduler or anneal_scheduler
 
     with tqdm(total=len_data) as pbar:
         for data in dataloader:
@@ -760,7 +765,7 @@ def train_epoch_weighted(model, optimizer, scheduler, loss_fn, dataloader, devic
                 nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
 
             optimizer.step()
-            if one_cycle_scheduler:
+            if batch_scheduler:
                 scheduler.step()
 
             final_loss += loss.item()
@@ -768,7 +773,7 @@ def train_epoch_weighted(model, optimizer, scheduler, loss_fn, dataloader, devic
             pbar.set_description(f'learning rate: {lr:.5e}')
             pbar.update()
     
-    if not one_cycle_scheduler and scheduler:
+    if not batch_scheduler and scheduler:
         scheduler.step()
 
     final_loss /= len(dataloader)
@@ -913,7 +918,7 @@ def print_all_valid_score(df, model, start_day=100, num_days=50,
     '''
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     all_score = []
-    for _day in range(start_day, 500, num_days):
+    for _day in range(start_day, 500-num_days, num_days):
         _valid = df[df.date.isin(range(_day, _day+num_days))]
         _valid = _valid[_valid.weight > 0]
         valid_set = ExtendedMarketDataset(_valid, features=feat_cols, targets=target_cols, resp=resp_cols)

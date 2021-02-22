@@ -26,6 +26,7 @@ Final model spikenet:
 
 1. subtract the most common values from columns with a spike in the histogram to form cat features.
 2. overfit models, trained on all data. Choose the 25 day span util scores' variation smallest ones. 
+3. train data is just using mean to fillna
 '''
 
 
@@ -40,9 +41,10 @@ EARLYSTOP_NUM = 5
 ALPHA = 0.6
 EPSILON = 5e-2 # strength of the regularizer
 VOLATILE_MODEL = False
+fold = 1
 
-s = 7
-SEED = 1127802*s
+s = 1
+SEED = 305958*s+fold
 np.random.seed(SEED)
 pd.core.common.random_state(SEED)
 torch.manual_seed(SEED)
@@ -53,17 +55,16 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed_all(SEED)
 
 splits = {
-          'train_days': (range(0,500), range(0,500), range(0,500)),
+          'train_days': (range(0,500), range(0,466), range(0,433)),
           'valid_days': (range(467, 500), range(434, 466), range(401, 433)),
           }
-fold = 0
 
 if fold == 0:
-    SAVE_THRESH = 3000
-    VAL_OFFSET = 150
+    SAVE_THRESH = 2000
+    VAL_OFFSET = 80
 elif fold == 1:
-    SAVE_THRESH = 3000
-    VAL_OFFSET = 150
+    SAVE_THRESH = 1750
+    VAL_OFFSET = 80
 elif fold == 2:
     SAVE_THRESH = 1000
     VAL_OFFSET = 100
@@ -77,8 +78,7 @@ VOLATILE_DAYS = [1,  4,  5,  12,  16,  18,  24,  37,  38,  43,  44,  45,  47,
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # %%
 with timer("Preprocessing train"):
-    # train_parquet = os.path.join(DATA_DIR, 'train.parquet')
-    train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
+    train_parquet = os.path.join(DATA_DIR, 'train.parquet')
     train = pd.read_parquet(train_parquet)
 # %%
 # feat_reg_index = [0, 17, 18, 37, 39, 40, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 55, 57, 58]
@@ -108,10 +108,21 @@ feat_cols = [f'feature_{i}' for i in range(130)]
 # feat_cols = features_reg
 cat_cols = [f+'_c' for f in features_spike]
 print(f"Number of features with spike: {len(cat_cols)}")
+
+    
+# %%
+train = train.query('date not in [2, 36, 270, 294]').reset_index(drop=True)
+
+
+if not VOLATILE_MODEL:
+    train = train.query('date > 85').reset_index(drop=True)
+# train = train.query(f'date not in {VOLATILE_DAYS}').reset_index(drop=True)
+train.fillna(train.mean(), inplace=True)
+train = train[train['weight'] != 0].reset_index(drop=True)
+
+
 # %%
 
-feat_spike_index = []
-most_common_vals = []
 most_common_vals = np.load(DATA_DIR+'spike_common_vals_42.npy').reshape(-1)
 
 for i, feat in tqdm(enumerate(features_spike)):
@@ -123,16 +134,8 @@ for i, feat in tqdm(enumerate(features_spike)):
     # most_common_vals.append(most_common_val)
     train[feat+'_c'] = (train[feat] - most_common_vals[i]).astype(int)
     # print(train[feat+'_c'].astype(int).value_counts()[:5])
-    
-# %%
-train = train.query(f'date not in {[2, 36, 270, 294]}').reset_index(drop=True)
 
-
-if not VOLATILE_MODEL:
-    train = train.query('date > 85').reset_index(drop=True)
-# train = train.query(f'date not in {VOLATILE_DAYS}').reset_index(drop=True)
-# train.fillna(train.mean(), inplace=True)
-train = train[train['weight'] != 0].reset_index(drop=True)
+#%%
 train['action'] = (train['resp'] > 0).astype('int')
 
 for c in range(1, 5):

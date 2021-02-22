@@ -29,13 +29,15 @@ LOAD_PRETRAIN = False
 
 DROP_ZERO_WEIGHT = True
 
+TRAINING_START = 0 
 FINETUNE_BATCH_SIZE = 4096_00
 BATCH_SIZE = 8192
 EPOCHS = 60
 FINETUNE_EPOCHS = 2
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-5
-EARLYSTOP_NUM = 5
+EARLYSTOP_NUM = 20
+NFOLDS = 1
 SCALING = 12
 THRESHOLD = 0.5
 
@@ -44,10 +46,8 @@ VOLATILE_DAYS = [1,  4,  5,  12,  16,  18,  24,  37,  38,  43,  44,  45,  47,
              59,  63,  80,  85, 161, 168, 452, 459, 462]
 VOLATILE_MODEL = False
 
-fold = 1
-
-# s = 11 for fold 1
-SEED = 1127802//5+fold
+s = 4
+SEED = 1127802*s
 np.random.seed(SEED)
 pd.core.common.random_state(SEED)
 torch.manual_seed(SEED)
@@ -58,19 +58,20 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed_all(SEED)
 
 splits = {
-          'train_days': (range(0,457), range(0,424), range(0,391)),
+          'train_days': (range(0,500), range(0,466), range(0,433)),
           'valid_days': (range(467, 500), range(434, 466), range(401, 433)),
           }
 
+fold = 1
+
 if fold == 0:
+    SAVE_THRESH = 1300
+    VAL_OFFSET = 100
+elif fold == 1:
     SAVE_THRESH = 1200
     VAL_OFFSET = 150
-elif fold == 1:
-    LEARNING_RATE = 1e-3
-    SAVE_THRESH = 700
-    VAL_OFFSET = 150
 elif fold == 2:
-    SAVE_THRESH = 50
+    SAVE_THRESH = 90
     VAL_OFFSET = 100
     EPOCHS = 40
     LEARNING_RATE = 1e-3
@@ -116,10 +117,17 @@ with timer("Preprocessing train"):
     # train = pd.concat([train, feat_add_df], axis=1)
 
     if not VOLATILE_MODEL:
-        train = train.query(f'date not in {VOLATILE_DAYS}').reset_index(drop = True)
+    # train = train.query(f'date not in {VOLATILE_DAYS}').reset_index(drop = True)
         train = train.query('date > 85').reset_index(drop=True)
 
-    train = train[train['weight'] > 0].reset_index(drop = True)
+    if DROP_ZERO_WEIGHT:
+        train = train[train['weight'] > 0].reset_index(drop = True)
+    else:
+        index_zero_weight =  (train['weight']==0)
+        index_zero_weight = np.where(index_zero_weight)[0]
+        index_zero_weight = np.random.choice(index_zero_weight, size=int(0.4*len(index_zero_weight)))
+        train.loc[index_zero_weight, ['weight']] = train.loc[index_zero_weight, ['weight']].clip(1e-7)
+        # train = train[train['weight'] > 0].reset_index(drop = True)
 
     train['action'] = (train['resp'] > 0).astype(int)
     for c in range(1,5):
@@ -184,7 +192,7 @@ for epoch in range(EPOCHS):
     valid_auc, valid_score = get_valid_score(valid_pred, valid,
                                              f=median_avg, threshold=0.5, target_cols=target_cols)
 
-    model_file = os.path.join(MODEL_DIR, f"final_{fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth")
+    model_file = MODEL_DIR + f"/final_{fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
     early_stop(epoch, valid_auc, model, 
                model_path=model_file,
                epoch_utility_score=valid_score)
@@ -219,7 +227,8 @@ for epoch in range(EPOCHS):
 # if DEBUG:
 #     torch.save(model.state_dict(), MODEL_DIR + f"/model_{_fold}.pth")
 # %%
-
+print(f"Loading {early_stop.model_path} for cv check.\n")
+model_weights = early_stop.model_path
 
 feat_cols = [f'feature_{i}' for i in range(130)]
 feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
@@ -229,24 +238,20 @@ model = ResidualMLP(input_size=len(feat_cols), hidden_size=256,
                     output_size=len(target_cols))
 model.to(device)
 try:
-    print(f"Loading {early_stop.model_path} for cv check.\n")
-    model_weights = early_stop.model_path
-    # model_weights = os.path.join(MODEL_DIR, 'final_1_util_865_auc_0.5450.pth')
     model.load_state_dict(torch.load(model_weights))
-    model.eval();
-
-    train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
-    train = preprocess_final(train_parquet, drop_zero_weight=True)
-
-    CV_START_DAY = 400
-    CV_DAYS = 33
-    print_all_valid_score(train, model, start_day=CV_START_DAY, num_days=CV_DAYS, 
-                            batch_size =2*8192, f=median_avg, threshold=0.5, 
-                            target_cols=target_cols, 
-                            feat_cols=feat_cols,
-                            resp_cols=resp_cols)
 except:
-    FileNotFoundError
-    print("Model not found")
+    model.load_state_dict(torch.load(
+        model_weights, map_location=torch.device('cpu')))
+model.eval();
 
+train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
+train = preprocess_final(train_parquet, drop_zero_weight=True)
+
+CV_START_DAY = 0
+CV_DAYS = 50
+print_all_valid_score(train, model, start_day=CV_START_DAY, num_days=CV_DAYS, 
+                        batch_size =2*8192, f=median_avg, threshold=0.5, 
+                        target_cols=target_cols, 
+                        feat_cols=feat_cols,
+                        resp_cols=resp_cols)
 # %%

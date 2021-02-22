@@ -1,6 +1,17 @@
 import gc
 import sys
 import os
+def add_sys_path():
+    try:
+        for f in ['/home/scao/anaconda3/lib/python3.8/lib-dynload',
+                 '/home/scao/anaconda3/lib/python3.8/site-packages']:
+            sys.path.append(f)
+    except:
+        RuntimeError
+        print("Path not added")
+add_sys_path()
+
+
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 import random as rd
 from contextlib import contextmanager
@@ -17,6 +28,7 @@ import pickle
 import seaborn as sns
 sns.set()
 from sklearn.metrics import roc_auc_score
+
 
 
 SEED = 1127 
