@@ -117,6 +117,60 @@ Current NN models use `date>85` and `weight>0`.
 - A local-public LB stable training strategy: RAdam/Adam with cosine annealing scheduler, utility function regularizer finetuning every 10 epochs with a `1e-3*lr` learning rate, 1 or 2 denoised targets added, 50% median average ensembling. 
 - Feature neutralization might not fit the iteration speed needed for the inference.
 
+## Validation scores
+
+#### ResNet (TF), two features group, regular days
+| Fold   |      Seed   |  Score |
+|--------|:-----------:|------: |
+| 0      |  1127802    | 1621.86 |
+| 1      |  1127802    | 1080.24 |
+| 1      |  792734     | 1221.17 |
+| 2      |  1127802    | 80.85   |
+| 2      |  97275      | 146.31  |
+
+#### ResNet (TF), two features group, volatile days
+| Fold   |      Seed   |  Score |
+|--------|:-----------:|------: |
+| 0      |  1127802    | 1640.27 |
+| 1      |  1127802    | 1054.42 |
+| 2      |  1127802    | 45.15  |
+| 0      |  157157    | 1563.25 |
+| 1      |  157157    |  1253.98 |
+| 2      |  157157    | 11.14  |
+| 0      |  745273    | 1511.12 |
+| 1      |  962656  |  0.01 |
+
+#### ResNet+spike (TF+S), three features group, regular days
+| Fold   |      Seed   |  Score |
+|--------|:-----------:|------: |
+| 0      |  1127802    | 1417.43 |
+| 1      |  1127802    | 1082.22 |
+| 2      |  1127802    | 59.87   |
+| 2      |  802        | 175.96 |
+
+#### (AE) regular days
+| Fold   |      Seed   |  Score |
+|--------|:-----------:|------: |
+| 0      |  692874     | 1413.37 |
+| 0      |  1127802    | 1552.13 |
+| 1      |  692874     | 1037.59 |
+| 1      |  1127802    | 1209.71 |
+| 2      |  692874     | 144.69 |
+| 2      |  1127802    | 144.29  |
+
+#### (AE) volatile days
+| Fold   |      Seed   |  Score |
+|--------|:-----------:|------: |
+| 0      |  969725     | 1485.01 |
+| 0      |  1127802    | 1672.50 |
+| 0      |  618734     | 1623.88 |
+| 1      |  969725     | 1284.02 |
+| 1      |  1127802    | 1347.90 |
+| 1      |  618734     | 969.63 |
+| 2      |  969725     | 0.83 |
+| 2      |  1127802    | 0.26  |
+| 2      |  618734     | 0    |
+
 # Gradient boosting models
 ## XGBoost:
 - Kaggle Notebook: [https://www.kaggle.com/ztyreg/xgb-benchmark](https://www.kaggle.com/ztyreg/xgb-benchmark)

@@ -1,12 +1,7 @@
 # %%
-from torchsummary import summary
+
 import os
 import sys
-import torch
-import torch.nn.functional as F
-import torch.nn as nn
-torch.backends.cudnn.deterministic = True  # for bincount
-
 current_path = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.dirname(current_path)
 MODEL_DIR = os.path.join(HOME,  'models')
@@ -15,6 +10,14 @@ sys.path.append(HOME)
 
 from utils import *
 from mlp import *
+
+import torch
+import torch.nn.functional as F
+import torch.nn as nn
+torch.backends.cudnn.deterministic = True  # for bincount
+
+
+from torchsummary import summary
 # %%
 '''
 Training script (excluding volatile days):
@@ -36,7 +39,7 @@ EPOCHS = 60
 FINETUNE_EPOCHS = 2
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-5
-EARLYSTOP_NUM = 20
+EARLYSTOP_NUM = 5
 NFOLDS = 1
 SCALING = 12
 THRESHOLD = 0.5
@@ -44,7 +47,7 @@ THRESHOLD = 0.5
 DAYS_TO_DROP = list(range(86))+[270, 294]
 VOLATILE_DAYS = [1,  4,  5,  12,  16,  18,  24,  37,  38,  43,  44,  45,  47,
              59,  63,  80,  85, 161, 168, 452, 459, 462]
-VOLATILE_MODEL = False
+VOLATILE_MODEL = True
 
 s = 4
 SEED = 1127802*s
@@ -62,18 +65,18 @@ splits = {
           'valid_days': (range(467, 500), range(434, 466), range(401, 433)),
           }
 
-fold = 1
+fold = 0
 
 if fold == 0:
-    SAVE_THRESH = 1300
+    SAVE_THRESH = 1500
     VAL_OFFSET = 100
 elif fold == 1:
-    SAVE_THRESH = 1200
-    VAL_OFFSET = 150
-elif fold == 2:
-    SAVE_THRESH = 90
+    SAVE_THRESH = 1500
     VAL_OFFSET = 100
-    EPOCHS = 40
+elif fold == 2:
+    SAVE_THRESH = 400
+    VAL_OFFSET = 100
+    EPOCHS = 50
     LEARNING_RATE = 1e-3
     EPSILON = 1e-2
 
@@ -191,17 +194,13 @@ for epoch in range(EPOCHS):
     valid_pred = valid_epoch(model, valid_loader, device)
     valid_auc, valid_score = get_valid_score(valid_pred, valid,
                                              f=median_avg, threshold=0.5, target_cols=target_cols)
-
-    model_file = MODEL_DIR + f"/final_{fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
+    if VOLATILE_MODEL:
+        model_file = MODEL_DIR + f"/pt_vol_overfit_{fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
+    else:
+        model_file = MODEL_DIR + f"/pt_overfit_{fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth"
     early_stop(epoch, valid_auc, model, 
                model_path=model_file,
                epoch_utility_score=valid_score)
-
-    # if early_stop.model_saved:
-    #     for g in optimizer.param_groups:
-    #         g['lr'] *= 0.1
-    #     lr = optimizer.param_groups[0]['lr']
-    #     print(f"\nNew learning rate: {lr:.4e}")
 
     tqdm.write(f"\n[Epoch {epoch+1}/{EPOCHS}] \t Fold {fold}")
     tqdm.write(f"Train loss: {train_loss:.4e} \t Current learning rate: {lr:.4e}")
@@ -210,25 +209,7 @@ for epoch in range(EPOCHS):
     if early_stop.early_stop:
         print("\nEarly stopping")
         break
-
-#%%
-# for epoch in range(FINETUNE_EPOCHS):
-#     util_loss, train_loss = train_epoch_finetune(model, finetune_optimizer, scheduler,
-#                                  regularizer, finetune_loader, device, loss_fn=loss_fn)
-
-#     valid_pred = valid_epoch(model, valid_loader, device)
-#     valid_auc, valid_score = get_valid_score(valid_pred, valid,
-#                                              f=median_avg, threshold=0.5, target_cols=target_cols)
-
-#     print(f"\n[Finetune epoch {epoch+1}/{FINETUNE_EPOCHS}] \t Fold {_fold}")
-#     print(f"Train loss: {train_loss:.4e} \t Util loss: {util_loss:.2f}")
-#     print(f"Valid utility: {valid_score:.2f} \t Valid AUC: {valid_auc:.4f}\n")
-
-# if DEBUG:
-#     torch.save(model.state_dict(), MODEL_DIR + f"/model_{_fold}.pth")
 # %%
-print(f"Loading {early_stop.model_path} for cv check.\n")
-model_weights = early_stop.model_path
 
 feat_cols = [f'feature_{i}' for i in range(130)]
 feat_cols.extend(['cross_41_42_43', 'cross_1_2'])
@@ -238,20 +219,25 @@ model = ResidualMLP(input_size=len(feat_cols), hidden_size=256,
                     output_size=len(target_cols))
 model.to(device)
 try:
+    # print(f"Loading {early_stop.model_path} for cv check.\n")
+    # model_weights = early_stop.model_path
+    # model_weights = os.path.join(MODEL_DIR, 'final_1_util_865_auc_0.5450.pth')
+    # model_weights = os.path.join(MODEL_DIR, 'final_0_util_1372_auc_0.5483.pth')
+    model_weights = os.path.join(MODEL_DIR, 'final_2_util_507_auc_0.5428.pth')
     model.load_state_dict(torch.load(model_weights))
+    model.eval();
+
+    train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
+    train = preprocess_final(train_parquet, drop_zero_weight=True)
+
+    CV_START_DAY = 401
+    CV_DAYS = 32
+    print_all_valid_score(train, model, start_day=CV_START_DAY, num_days=CV_DAYS, 
+                            batch_size =2*8192, f=median_avg, threshold=0.5, 
+                            target_cols=target_cols, 
+                            feat_cols=feat_cols,
+                            resp_cols=resp_cols)
 except:
-    model.load_state_dict(torch.load(
-        model_weights, map_location=torch.device('cpu')))
-model.eval();
-
-train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
-train = preprocess_final(train_parquet, drop_zero_weight=True)
-
-CV_START_DAY = 0
-CV_DAYS = 50
-print_all_valid_score(train, model, start_day=CV_START_DAY, num_days=CV_DAYS, 
-                        batch_size =2*8192, f=median_avg, threshold=0.5, 
-                        target_cols=target_cols, 
-                        feat_cols=feat_cols,
-                        resp_cols=resp_cols)
+    FileNotFoundError
+    print("Model not found")
 # %%

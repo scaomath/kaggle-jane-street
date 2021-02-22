@@ -31,7 +31,7 @@ DROP_ZERO_WEIGHT = True
 
 FINETUNE_BATCH_SIZE = 4096_00
 BATCH_SIZE = 8192
-EPOCHS = 60
+EPOCHS = 80
 FINETUNE_EPOCHS = 2
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-5
@@ -42,12 +42,12 @@ THRESHOLD = 0.5
 DAYS_TO_DROP = list(range(86))+[270, 294]
 VOLATILE_DAYS = [1,  4,  5,  12,  16,  18,  24,  37,  38,  43,  44,  45,  47,
              59,  63,  80,  85, 161, 168, 452, 459, 462]
-VOLATILE_MODEL = False
+VOLATILE_MODEL = True
 
-fold = 1
+fold = 2
 
 # s = 11 for fold 1
-SEED = 1127802//5+fold
+SEED = 1127802//8+fold
 np.random.seed(SEED)
 pd.core.common.random_state(SEED)
 torch.manual_seed(SEED)
@@ -63,14 +63,14 @@ splits = {
           }
 
 if fold == 0:
-    SAVE_THRESH = 1200
+    SAVE_THRESH = 1000
     VAL_OFFSET = 150
 elif fold == 1:
     LEARNING_RATE = 1e-3
-    SAVE_THRESH = 700
+    SAVE_THRESH = 1100
     VAL_OFFSET = 150
 elif fold == 2:
-    SAVE_THRESH = 50
+    SAVE_THRESH = 100
     VAL_OFFSET = 100
     EPOCHS = 40
     LEARNING_RATE = 1e-3
@@ -183,8 +183,12 @@ for epoch in range(EPOCHS):
     valid_pred = valid_epoch(model, valid_loader, device)
     valid_auc, valid_score = get_valid_score(valid_pred, valid,
                                              f=median_avg, threshold=0.5, target_cols=target_cols)
-
-    model_file = os.path.join(MODEL_DIR, f"final_{fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth")
+    if VOLATILE_MODEL:
+        model_file = os.path.join(MODEL_DIR, 
+                                 f"pt_volatile_{fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth")
+    else:
+        model_file = os.path.join(MODEL_DIR, 
+                                 f"pt_{fold}_util_{int(valid_score)}_auc_{valid_auc:.4f}.pth")
     early_stop(epoch, valid_auc, model, 
                model_path=model_file,
                epoch_utility_score=valid_score)
@@ -238,8 +242,8 @@ try:
     train_parquet = os.path.join(DATA_DIR, 'train_pdm.parquet')
     train = preprocess_final(train_parquet, drop_zero_weight=True)
 
-    CV_START_DAY = 400
-    CV_DAYS = 33
+    CV_START_DAY = 401
+    CV_DAYS = 32
     print_all_valid_score(train, model, start_day=CV_START_DAY, num_days=CV_DAYS, 
                             batch_size =2*8192, f=median_avg, threshold=0.5, 
                             target_cols=target_cols, 
