@@ -1,17 +1,24 @@
 # Playground for Jane Street Market Prediction Competition on Kaggle
 
+# Introduction
+Jane Street hosted a code competition of predicting the stock market (Feb 2021 to Aug 2021) using the past high frequency trading data (2 years of data before 2018?) on Kaggle: [https://www.kaggle.com/c/jane-street-market-prediction](https://www.kaggle.com/c/jane-street-market-prediction). 
+The training data provided contain 500 days of high frequency trading data, total 2.4 million rows. The public leaderboard data contain 1 year of high frequency trading data from some time before Aug 2020 and up to that. The private ranges from a random time from July/Aug 2020 up to Aug 2021 (it was March 2021 as of the time of writings).  This training dataset contains an anonymized set of features, `feature_{0...129}`, representing real stock market data. Each row in the dataset represents a trading opportunity.
+
+This is a code competition in that we have to prepare a pipeline of models that can do inference 1 trading opportunity at a time (no peaking into the future) subject to the inference API on Kaggle, and this submission should be able to perform the inference for 1.1 million samples in under 5 hours on cloud.
+For each row, we will be predicting an action value: 1 to make the trade and 0 to pass on it. Each trade has an associated `weight` and `resp`, which together represents a return on the trade. The date column is an integer which represents the day of the trade, while `ts_id` represents a time ordering.
+
 # Team: Semper Augustus
 [Shuhao Cao](https://scaomath.github.io), [Carl McBride Ellis](http://www.sklogwiki.org/SklogWiki/carlmcbride.html), [Ethan Zheng](https://www.tzheng.org)
 
 # Final submissions
 
 ## Data preparation
-The data contain 500 days of high frequency trading data from Jane Street, total 2.4 million rows.
 
 0. All data: only drop the two partial days and the two <2k `ts_id` days (done first).
-1. `fillna()` past day mean including all weight zero rows. 
+1. `fillna()` uses the past day mean including all weight zero rows for every feature. 
 2. ~~Most common values `fillna` for spike features rows.~~ (not any more after categorical embedding)
-4. Smoother data: aside from 1, query day > 85, drop `ts_id` > 9000 days.
+4. Smoother data: aside from 1, query `day > 85`, ~~drop `ts_id` > 9000 days~~(decreases CV by a margin so still included), dropping of data before day 85 is covered in Carl's EDA: [
+Jane Street: EDA of day 0 and feature importance](https://www.kaggle.com/carlmcbrideellis/jane-street-eda-of-day-0-and-feature-importance). 
 5. Final training uses only `weight > 0` rows, ~~with a randomly selected 40% of weight zero rows' weight being replaced by 1e-7 to reduce overfitting~~ (reduces CV so discarded).
 6. ~~A new de-noised target is generated with all five targets~~ (CV too good but leaderboard bad).
 
@@ -20,13 +27,38 @@ The data contain 500 days of high frequency trading data from Jane Street, total
 - (S) Carl found that some features have an extremely high number of common values. Based on close inspection. I have a conjecture that they are certain categorical features' embedding. So this model is designed to add an embedding block for these features. Also with the skip connection mechanics, around 300k
 parameters, best local CV and best single model leaderboard score.
 - (AE) Tensorflow implementation of an autoencoder + a small MLP net with skip connection in the first layer. Small net. Currently the best scored public ones with a serious CV using 3 folds ensemble.
-- (TF) Tensorflow Residual MLP using a filtering layer with high dropout rates to filter out hand-picked unimportant features suggested by Carl.
-- (TF overfit) the infamous overfit model with a 1111 seed.
+- (TF) Tensorflow Residual MLP using a filtering layer with high dropout rates to filter out hand-picked unimportant features suggested by Carl. 
+- ~~(TF overfit) the infamous overfit model with a 1111 seed.~~ (we decided to exclude this one in the final submission)
 
 ## Train
 
-### Train-validation splits
-A grouped validation strategy based on a total of 100 days as validation, a 10-day gap between the last day of train and the first of valid, three folds.
+### Validation score
+Instead of the common accuracy or area-under-curve metrics for the classification problem, this competition is evaluated on a utility score. 
+
+For each date $i$, we define: for `r` representing the `resp` (response), `w` representing the `weight`, and `a` representing the `action` (1 for taking the trade, 0s for pass):
+<p align="center">
+<img src="https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle%20p_i%20%3D%20%5Csum_%7Bj%7D%20w_%7Bij%7D%20r_%7Bij%7D%20a_%7Bij%7D">
+</p>
+
+Then it is summed up to 
+<p align="center">
+<img src="https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle%20t%20%3D%20%5Cfrac%7B%5Csum%20p_i%20%7D%7B%5Csqrt%7B%5Csum%20p_i%5E2%7D%7D%20*%20%5Csqrt%7B%5Cfrac%7B250%7D%7B%7Ci%7C%7D%7D%2C">
+</p>
+
+Finally the utility is computed by:
+<p align="center">
+<img src="https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle%20u%20%3D%20%5Cmin(%5Cmax(t%2C0)%2C%206)%20%20%5Csum_i%20p_i.">
+</p>
+
+Essentially, without considering some real market constraint, when every `p_i` become positive, this is to maximize 
+
+<p align= "center">
+<img src="https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle%20%5Cleft(%5Csum_i%20p_i%5Cright)%5E2%20%5Ccdot%20%5Cleft(%20%0A%20%5Csum_i%20p_i%5E2%5Cright)%5E%7B-1%7D">
+</p>
+which we will use to construct a fine tuner for trained models.
+
+### Train-validation strategy
+A grouped validation strategy based on a total of 100 days as validation, a 10-day gap between the last day of train and the first of valid, three folds. The gap is due to the speculation of certain features being the moving average of certain metrics for the tradings.
 ```python
 splits = {
           'train_days': (range(0,457), range(0,424), range(0,391)),
@@ -34,6 +66,7 @@ splits = {
           }
 ```
 
+### Training of different models
 1. Volatile models: all data with only `resp`, `resp_3`, `resp_4` as targets.
 2. Smoother models: smoother data with all five `resp`s.
 ~~3. De-noised models: smoother data with all five `resp`s + a de-noised target~~.
@@ -41,11 +74,12 @@ splits = {
 5. During training of torch models, a fine-tuning regularizer is applied each 10 epochs to maximize the utility function by choosing action being the sigmoid of the outputs (Only for torch models, I do not know how to incorporate this in `tensorflow` training, as tensorflow's custom loss function is not that straightforward to keep track of extra inputs between batches).
 
 ## Submissions
-1. Local best CV ones within a three seeds bag. Final models: a set of `3(S) + 3(PT) + 3(AE) + 1(TF)`  for both smooth and volatile data.
-2. Trained with all data using the “public leaderboard as CV” epochs determined earlier, plus the infamous tensorflow seed 1111 overfit model. The validation for this submission is based on the variation of the utility score in all train data among all 25-day non-overlapping spans.
+1. Local best CV ones within a several-seeded bag. Final models: a set of `3(S) + 3(PT) + 3(AE) + 1(TF)`  for both smooth and volatile data.
+2. ~~Trained with all data using the “public leaderboard as CV” epochs determined earlier, plus the infamous tensorflow seed 1111 overfit model. The validation for this submission is based on the variation of the utility score in all train data among all 25-day non-overlapping spans.~~
+3. As our designated submission timed out... due to my poor judgement on the number of models to ensemble, we decided to choose an overfit model using the first pipeline.
 
 ## Inference 
-1. CPU inference because the submission is CPU-bounded rather GPU. Torch models are usually faster than TF, TF models with `numba` backend enabled.
+1. CPU inference because the submission is CPU-bounded rather GPU. Torch models are usually faster than TF, TF models with `numba` backend enabled. (Update Feb 23 after the competition ended) I found that GPU inference became faster than CPU as more Tensorflow-based models are incorporated in the pipeline.
 2. (Main contribution of Semper Augustus) Use `feature_64`'s [average gradient (a scaled version of $\arcsin (t)$) suggest by Carl](https://www.kaggle.com/c/jane-street-market-prediction/discussion/208013#1135364), and the number of trades in the previous day as a criterion to determine the models to include. Reference: [slope test of the past day class by Ethan and iter_cv simulation written by Shuhao](https://www.kaggle.com/ztyreg/validate-busy-prediction), [slope validation](https://www.kaggle.com/ztyreg/validate-busy-prediction)
 3. Blending is always concatenating models in a bag then taking the middle 60%'s
 average (median if only 3 models), then concatenating again to take the middle 60% average (50% if a day is busy). For example, if we have `5 (PT) + 3 (AE) + 1 (TF)`, then `5 (PT)`'s predictions
@@ -54,6 +88,8 @@ are concatenated and averaged along `axis 0` with the middle three, and `(AE)` s
 `(TF)` trained on the smoother models.
 1. Busy days: above models trained on all data.
 
+----
+### Below were the notes and tries before we orchestrated our final solution.
 
 
 # Things to try for the final submission:
@@ -108,7 +144,8 @@ Current NN models use `date>85` and `weight>0`.
 - Forward fill (8781.740) seems to be better than mean imputation, although I haven't tested if the difference is significant
 
 ## AE+MLP+prediction cache
-- Attempt 0.1: simply saving `pred_df.copy()` and using `pd.concat` is way too slow (7-8 iteration/s << 45 which is the current starter's). TO-DO: add a class so that prediction is a function under this class, model outputs to give more information, and some objects "depicting" the current market volatility. 
+- Attempt 0.1: simply saving `pred_df.copy()` and using `pd.concat` is way too slow (7-8 iteration/s << 45 which is the current starter's). 
+- TO-DO: add a class so that prediction is a function under this class, model outputs to give more information, and some objects "depicting" the current market volatility. 
 
 ## A new Residual+MLP model
 - The key is to train using the actual `resp` columns as target, and when doing the inference, apply the sigmoid function to the output (why `BCEwLogits` performs better than `CrossEntropy`???).
