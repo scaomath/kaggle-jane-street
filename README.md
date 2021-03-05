@@ -10,6 +10,9 @@ For each row, we will be predicting an action value: 1 to make the trade and 0 t
 # Team: Semper Augustus
 [Shuhao Cao](https://scaomath.github.io), [Carl McBride Ellis](http://www.sklogwiki.org/SklogWiki/carlmcbride.html), [Ethan Zheng](https://www.tzheng.org)
 
+### Model performance on live stock market data update
+- Mar 5: rank 99/4245, top 3%. Overfit: 4790.458, Best CV: 4541.474.
+
 # Final submissions
 
 ## Data preparation
