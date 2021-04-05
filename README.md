@@ -12,10 +12,11 @@ For each row, we will be predicting an action value: 1 to make the trade and 0 t
 
 ### Model performance on live stock market data update
 
-| Date of LB |       Ranking      | Overfit Ensemble (OE) | OE delta | Local Best CV (LBC) | LBC delta |
-|:----------:|:------------------:|:---------------------:|:--------:|---------------------|:---------:|
-|    Mar 5   | 99/4245, top 2.33% |        4790.458       |          |       4541.474      |           |
-|   Mar 17   | 75/4245, top 1.77% |       5153.324        |   +363   |       4952.939      | +411      |
+| Date of LB |       Ranking       | Overfit Ensemble (OE) | OE delta | Local Best CV (LBC) | LBC delta |
+|:----------:|:------------------: |:---------------------:|:--------:|---------------------|:---------:|
+|    Mar 5   | 99/4245, top 2.33%  |        4790.458       |          |       4541.474      |           |
+|   Mar 17   | 75/4245, top 1.77%  |       5153.324        |   +363   |       4952.939      | +411      |
+|   Mar 31   | 252/4245,top 5.93%  |       3934.002        |   -1219  |       3849.940      | -1103     |
 
 # Final submissions
 
