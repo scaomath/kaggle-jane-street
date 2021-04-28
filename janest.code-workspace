@@ -4,8 +4,4 @@
 			"path": "."
 		}
 	],
-	"settings": {
-		"jupyter.jupyterServerType": "local",
-		"python.pythonPath": "/home/scao/anaconda3/bin/python"
-	}
 }
