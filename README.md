@@ -19,6 +19,7 @@ For each row, we will be predicting an action value: 1 to make the trade and 0 t
 |   Mar 31   | 252/4245,top 5.93%   |       3934.002        |   -1219  |       3849.940      | -1103     |
 |   Apr 14   | 260/4245,top 6.12%   |       3999.195        |   +65    |       4010.201      | +160      |
 |   Apr 29   | 252/4245,top 5.93%   |       3843.239        |   -156   |       3889.275      | -121      |
+|   May 12   | 152/4245,top 3.58%   |       4506.561        |   +663   |       4493.300      | +604      |
 
 # Final submissions
 
