@@ -26,6 +26,7 @@ For each row, we will be predicting an action value: 1 to make the trade and 0 t
 |   Jul 21   | 270/4245,top 6.36%   |       4479.715        |   -9     |       4445.238      | -23       |
 |   Aug 2    | 359/4245,top 8.46%   |       4465.683        |   -14    |       ?             | ?         |
 |   Aug 18   | 212/4245,top 4.99%   |       4369.578        |   -96    |       4346.610      | ?         |
+|  Final standing | 241/4245,top 5.68%  |   4272.599        |   -67    |       4144.837      | -202      |
 
 # Final submissions
 
